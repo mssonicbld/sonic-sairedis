@@ -18,11 +18,11 @@ namespace sairedis
 
         public:
 
-            sai_status_t initialize(
+            sai_status_t apiInitialize(
                     _In_ uint64_t flags,
                     _In_ const sai_service_method_table_t *service_method_table) override;
 
-            sai_status_t uninitialize(void) override;
+            sai_status_t apiUninitialize(void) override;
 
         public: // SAI interface overrides
 
@@ -80,6 +80,15 @@ namespace sairedis
                     _In_ sai_bulk_op_error_mode_t mode,
                     _Out_ sai_status_t *object_statuses) override;
 
+            virtual sai_status_t bulkGet(
+                    _In_ sai_object_type_t object_type,
+                    _In_ uint32_t object_count,
+                    _In_ const sai_object_id_t *object_id,
+                    _In_ const uint32_t *attr_count,
+                    _Inout_ sai_attribute_t **attr_list,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _Out_ sai_status_t *object_statuses) override;
+
         public: // stats API
 
             virtual sai_status_t getStats(
@@ -93,6 +102,11 @@ namespace sairedis
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _Inout_ sai_stat_capability_list_t *stats_capability) override;
+
+            virtual sai_status_t queryStatsStCapability(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_object_type_t object_type,
+                    _Inout_ sai_stat_st_capability_list_t *stats_capability) override;
 
             virtual sai_status_t getStatsExt(
                     _In_ sai_object_type_t object_type,
@@ -151,7 +165,7 @@ namespace sairedis
                     _In_ sai_attr_id_t attr_id,
                     _Out_ sai_attr_capability_t *capability) override;
 
-            virtual sai_status_t queryAattributeEnumValuesCapability(
+            virtual sai_status_t queryAttributeEnumValuesCapability(
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _In_ sai_attr_id_t attr_id,
@@ -166,6 +180,9 @@ namespace sairedis
             virtual sai_status_t logSet(
                     _In_ sai_api_t api,
                     _In_ sai_log_level_t log_level) override;
+
+            virtual sai_status_t queryApiVersion(
+                    _Out_ sai_api_version_t *version) override;
 
         private:
 

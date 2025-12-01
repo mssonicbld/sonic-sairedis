@@ -6,7 +6,6 @@ LDADD_GTEST = -L/usr/src/gtest -lgtest -lgtest_main
 
 tests_SOURCES = \
 				main.cpp \
-				../../meta/DummySaiInterface.cpp \
 				../../meta/MetaTestSaiInterface.cpp \
 				../../lib/VirtualObjectIdManager.cpp \
 				../../lib/SwitchConfig.cpp \
@@ -15,6 +14,7 @@ tests_SOURCES = \
 				../../lib/Channel.cpp \
 				MockMeta.cpp \
 				TestAttrKeyMap.cpp \
+				TestDummySaiInterface.cpp \
 				TestGlobals.cpp \
 				TestMetaKeyHasher.cpp \
 				TestNotificationFactory.cpp \
@@ -23,8 +23,15 @@ tests_SOURCES = \
 				TestNotificationPortStateChange.cpp \
 				TestNotificationQueuePfcDeadlock.cpp \
 				TestNotificationSwitchShutdownRequest.cpp \
+				TestNotificationSwitchAsicSdkHealthEvent.cpp \
 				TestNotificationSwitchStateChange.cpp \
 				TestNotificationBfdSessionStateChange.cpp \
+				TestNotificationIcmpEchoSessionStateChange.cpp \
+				TestNotificationHaScopeEvent.cpp \
+				TestNotificationHaSetEvent.cpp \
+				TestNotificationTam.cpp \
+                                TestNotificationMacsecPostStatus.cpp \
+                                TestNotificationSwitchMacsecPostStatus.cpp \
 				TestOidRefCounter.cpp \
 				TestPerformanceIntervalTimer.cpp \
 				TestPortRelatedSet.cpp \

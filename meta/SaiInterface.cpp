@@ -67,6 +67,21 @@ sai_status_t SaiInterface::create(
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             return create(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr_count, attr_list);
 
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return create(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return create(&metaKey.objectkey.key.global_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return create(&metaKey.objectkey.key.eni_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_IPMC_ENTRY:
+            return create(&metaKey.objectkey.key.ipmc_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_L2MC_ENTRY:
+            return create(&metaKey.objectkey.key.l2mc_entry, attr_count, attr_list);
+
         default:
 
             SWSS_LOG_ERROR("object type %s not implemented, FIXME", info->objecttypename);
@@ -134,6 +149,21 @@ sai_status_t SaiInterface::remove(
 
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             return remove(&metaKey.objectkey.key.outbound_ca_to_pa_entry);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return remove(&metaKey.objectkey.key.outbound_port_map_port_range_entry);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return remove(&metaKey.objectkey.key.global_trusted_vni_entry);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return remove(&metaKey.objectkey.key.eni_trusted_vni_entry);
+
+        case SAI_OBJECT_TYPE_IPMC_ENTRY:
+            return remove(&metaKey.objectkey.key.ipmc_entry);
+
+        case SAI_OBJECT_TYPE_L2MC_ENTRY:
+            return remove(&metaKey.objectkey.key.l2mc_entry);
 
         default:
 
@@ -203,6 +233,21 @@ sai_status_t SaiInterface::set(
 
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             return set(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return set(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return set(&metaKey.objectkey.key.global_trusted_vni_entry, attr);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return set(&metaKey.objectkey.key.eni_trusted_vni_entry, attr);
+
+        case SAI_OBJECT_TYPE_IPMC_ENTRY:
+            return set(&metaKey.objectkey.key.ipmc_entry, attr);
+
+        case SAI_OBJECT_TYPE_L2MC_ENTRY:
+            return set(&metaKey.objectkey.key.l2mc_entry, attr);
 
         default:
 
@@ -274,6 +319,21 @@ sai_status_t SaiInterface::get(
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             return get(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr_count, attr_list);
 
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return get(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return get(&metaKey.objectkey.key.global_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return get(&metaKey.objectkey.key.eni_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_IPMC_ENTRY:
+            return get(&metaKey.objectkey.key.ipmc_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_L2MC_ENTRY:
+            return get(&metaKey.objectkey.key.l2mc_entry, attr_count, attr_list);
+
         default:
 
             SWSS_LOG_ERROR("object type %s not implemented, FIXME", info->objecttypename);
@@ -338,4 +398,60 @@ sai_log_level_t SaiInterface::logGet(
     // default for all apis
 
     return SAI_LOG_LEVEL_NOTICE;
+}
+
+sai_status_t SaiInterface::getStats(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _Out_ uint64_t *counters)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t SaiInterface::getStatsExt(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Out_ uint64_t *counters)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t SaiInterface::clearStats(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+std::shared_ptr<SaiOptions> SaiInterface::getOptions(
+        _In_ const std::string& key)
+{
+    SWSS_LOG_ENTER();
+
+    return m_optionsMap[key];
+}
+
+void SaiInterface::setOptions(
+        _In_ const std::string& key,
+        _In_ std::shared_ptr<SaiOptions> options)
+{
+    SWSS_LOG_ENTER();
+
+    m_optionsMap[key] = options;
 }

@@ -309,7 +309,7 @@ static bool operator==(
 {
     // SWSS_LOG_ENTER(); // disabled for performance reasons
 
-    return a.switch_id == b.switch_id && a.eni_id == b.eni_id && a.destination == b.destination;
+    return a.switch_id == b.switch_id && a.destination == b.destination && a.outbound_routing_group_id == b.outbound_routing_group_id;
 }
 
 static bool operator==(
@@ -319,6 +319,42 @@ static bool operator==(
     // SWSS_LOG_ENTER(); // disabled for performance reasons
 
     return a.switch_id == b.switch_id && a.dst_vnet_id == b.dst_vnet_id && a.dip == b.dip;
+}
+
+static bool operator==(
+        _In_ const sai_u32_range_t& a,
+        _In_ const sai_u32_range_t& b)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    return a.min == b.min && a.max == b.max;
+}
+
+static bool operator==(
+        _In_ const sai_outbound_port_map_port_range_entry_t& a,
+        _In_ const sai_outbound_port_map_port_range_entry_t& b)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    return a.switch_id == b.switch_id && a.outbound_port_map_id == b.outbound_port_map_id && a.dst_port_range == b.dst_port_range;
+}
+
+static bool operator==(
+        _In_ const sai_global_trusted_vni_entry_t& a,
+        _In_ const sai_global_trusted_vni_entry_t& b)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    return a.switch_id == b.switch_id && a.vni_range == b.vni_range;
+}
+
+static bool operator==(
+        _In_ const sai_eni_trusted_vni_entry_t& a,
+        _In_ const sai_eni_trusted_vni_entry_t& b)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    return a.switch_id == b.switch_id && a.eni_id == b.eni_id && a.vni_range == b.vni_range;
 }
 
 bool MetaKeyHasher::operator()(
@@ -382,6 +418,15 @@ bool MetaKeyHasher::operator()(
 
     if ((sai_object_type_extensions_t)a.objecttype == SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY)
         return a.objectkey.key.outbound_ca_to_pa_entry == b.objectkey.key.outbound_ca_to_pa_entry;
+
+    if ((sai_object_type_extensions_t)a.objecttype == SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY)
+        return a.objectkey.key.outbound_port_map_port_range_entry == b.objectkey.key.outbound_port_map_port_range_entry;
+
+    if ((sai_object_type_extensions_t)a.objecttype == SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY)
+        return a.objectkey.key.global_trusted_vni_entry == b.objectkey.key.global_trusted_vni_entry;
+
+    if ((sai_object_type_extensions_t)a.objecttype == SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY)
+        return a.objectkey.key.eni_trusted_vni_entry == b.objectkey.key.eni_trusted_vni_entry;
 
     SWSS_LOG_THROW("not implemented: %s",
             sai_serialize_object_meta_key(a).c_str());
@@ -673,8 +718,8 @@ static inline std::size_t sai_get_hash(
     // SWSS_LOG_ENTER(); // disabled for performance reasons
 
     std::size_t hash = 0;
-    boost::hash_combine(hash, oe.eni_id);
     boost::hash_combine(hash, sai_get_hash(oe.destination));
+    boost::hash_combine(hash, oe.outbound_routing_group_id);
 
     return hash;
 }
@@ -687,6 +732,53 @@ static inline std::size_t sai_get_hash(
     std::size_t hash = 0;
     boost::hash_combine(hash, oe.dst_vnet_id);
     boost::hash_combine(hash, sai_get_hash(oe.dip));
+
+    return hash;
+}
+
+static inline std::size_t sai_get_hash(
+        _In_ const sai_u32_range_t & oe)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    std::size_t hash = 0;
+    boost::hash_combine(hash, oe.min);
+    boost::hash_combine(hash, oe.max);
+
+    return hash;
+}
+
+static inline std::size_t sai_get_hash(
+        _In_ const sai_outbound_port_map_port_range_entry_t & oe)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    std::size_t hash = 0;
+    boost::hash_combine(hash, oe.outbound_port_map_id);
+    boost::hash_combine(hash, sai_get_hash(oe.dst_port_range));
+
+    return hash;
+}
+
+static inline std::size_t sai_get_hash(
+        _In_ const sai_global_trusted_vni_entry_t & oe)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    std::size_t hash = 0;
+    boost::hash_combine(hash, sai_get_hash(oe.vni_range));
+
+    return hash;
+}
+
+static inline std::size_t sai_get_hash(
+        _In_ const sai_eni_trusted_vni_entry_t & oe)
+{
+    // SWSS_LOG_ENTER(); // disabled for performance reasons
+
+    std::size_t hash = 0;
+    boost::hash_combine(hash, oe.eni_id);
+    boost::hash_combine(hash, sai_get_hash(oe.vni_range));
 
     return hash;
 }
@@ -759,6 +851,15 @@ std::size_t MetaKeyHasher::operator()(
 
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             return sai_get_hash(k.objectkey.key.outbound_ca_to_pa_entry);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return sai_get_hash(k.objectkey.key.outbound_port_map_port_range_entry);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return sai_get_hash(k.objectkey.key.global_trusted_vni_entry);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return sai_get_hash(k.objectkey.key.eni_trusted_vni_entry);
 
         default:
             SWSS_LOG_THROW("not handled: %s", sai_serialize_object_type(k.objecttype).c_str());

@@ -37,11 +37,11 @@ namespace sairedis
 
         public:
 
-            virtual sai_status_t initialize(
+            virtual sai_status_t apiInitialize(
                     _In_ uint64_t flags,
                     _In_ const sai_service_method_table_t *service_method_table) override;
 
-            virtual sai_status_t uninitialize(void) override;
+            virtual sai_status_t apiUninitialize(void) override;
 
         public: // SAI interface overrides
 
@@ -99,6 +99,15 @@ namespace sairedis
                     _In_ sai_bulk_op_error_mode_t mode,
                     _Out_ sai_status_t *object_statuses) override;
 
+            virtual sai_status_t bulkGet(
+                    _In_ sai_object_type_t object_type,
+                    _In_ uint32_t object_count,
+                    _In_ const sai_object_id_t *object_id,
+                    _In_ const uint32_t *attr_count,
+                    _Inout_ sai_attribute_t **attr_list,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _Out_ sai_status_t *object_statuses) override;
+
         public: // stats API
 
             virtual sai_status_t getStats(
@@ -112,6 +121,11 @@ namespace sairedis
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _Inout_ sai_stat_capability_list_t *stats_capability) override;
+
+            virtual sai_status_t queryStatsStCapability(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_object_type_t object_type,
+                    _Inout_ sai_stat_st_capability_list_t *stats_capability) override;
 
             virtual sai_status_t getStatsExt(
                     _In_ sai_object_type_t object_type,
@@ -170,7 +184,7 @@ namespace sairedis
                     _In_ sai_attr_id_t attr_id,
                     _Out_ sai_attr_capability_t *capability) override;
 
-            virtual sai_status_t queryAattributeEnumValuesCapability(
+            virtual sai_status_t queryAttributeEnumValuesCapability(
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _In_ sai_attr_id_t attr_id,
@@ -185,6 +199,9 @@ namespace sairedis
             virtual sai_status_t logSet(
                     _In_ sai_api_t api,
                     _In_ sai_log_level_t log_level) override;
+
+            virtual sai_status_t queryApiVersion(
+                    _Out_ sai_api_version_t *version) override;
 
         public: // notify syncd
 
@@ -214,6 +231,9 @@ namespace sairedis
                     _In_ std::shared_ptr<Notification> notification);
 
             const std::map<sai_object_id_t, swss::TableDump>& getTableDump() const;
+
+            bool containsSwitch(
+                    _In_ sai_object_id_t switchId) const;
 
         private: // QUAD API helpers
 
@@ -261,6 +281,14 @@ namespace sairedis
                     _In_ sai_bulk_op_error_mode_t mode,
                     _Out_ sai_status_t *object_statuses);
 
+            sai_status_t bulkGet(
+                    _In_ sai_object_type_t object_type,
+                    _In_ const std::vector<std::string> &serialized_object_ids,
+                    _In_ const uint32_t *attr_count,
+                    _Inout_ sai_attribute_t **attr_list,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _Out_ sai_status_t *object_statuses);
+
         private: // QUAD API response
 
             /**
@@ -302,6 +330,23 @@ namespace sairedis
                     _In_ uint32_t object_count,
                     _Out_ sai_status_t *object_statuses);
 
+            /**
+             * @brief Wait for bulk GET response.
+             *
+             * Will wait for response from syncd. Method only used for bulk
+             * GET object. If object status is SUCCESS all values will be deserialized
+             * and transferred to user buffers. If object status is BUFFER_OVERFLOW
+             * then all non list values will be transferred, but LIST objects
+             * will only transfer COUNT item of list, without touching user
+             * list at all.
+             */
+            sai_status_t waitForBulkGetResponse(
+                    _In_ sai_object_type_t objectType,
+                    _In_ uint32_t object_count,
+                    _In_ const uint32_t *attr_count,
+                    _Inout_ sai_attribute_t **attr_list,
+                    _Out_ sai_status_t *object_statuses);
+
         private: // stats API response
 
             sai_status_t waitForGetStatsResponse(
@@ -319,13 +364,19 @@ namespace sairedis
             sai_status_t waitForQueryAttributeCapabilityResponse(
                     _Out_ sai_attr_capability_t* capability);
 
-            sai_status_t waitForQueryAattributeEnumValuesCapabilityResponse(
+            sai_status_t waitForQueryAttributeEnumValuesCapabilityResponse(
                     _Inout_ sai_s32_list_t* enumValuesCapability);
 
             sai_status_t waitForObjectTypeGetAvailabilityResponse(
                     _In_ uint64_t *count);
 
-        private: // notify syncd response
+            sai_status_t waitForQueryStatsCapabilityResponse(
+                    _Inout_ sai_stat_capability_list_t* stats_capability);
+
+            sai_status_t waitForQueryStatsStCapabilityResponse(
+                    _Inout_ sai_stat_st_capability_list_t *stats_capability);
+
+    private: // notify syncd response
 
             sai_status_t waitForNotifySyncdResponse();
 
@@ -342,6 +393,27 @@ namespace sairedis
                     _In_ sai_object_type_t objectType,
                     _In_ sai_object_id_t objectId,
                     _In_ const sai_attribute_t *attr);
+
+            bool isSaiS8ListValidString(
+                    _In_ const sai_s8_list_t &s8list);
+
+            bool emplaceStrings(
+                    _In_ const sai_s8_list_t &field,
+                    _In_ const sai_s8_list_t &value,
+                    _Out_ std::vector<swss::FieldValueTuple> &entries);
+
+            bool emplaceStrings(
+                    _In_ const char *field,
+                    _In_ const sai_s8_list_t &value,
+                    _Out_ std::vector<swss::FieldValueTuple> &entries);
+
+            sai_status_t notifyCounterGroupOperations(
+                    _In_ sai_object_id_t objectId,
+                    _In_ const sai_redis_flex_counter_group_parameter_t *flexCounterGroupParam);
+
+            sai_status_t notifyCounterOperations(
+                    _In_ sai_object_id_t objectId,
+                    _In_ const sai_redis_flex_counter_parameter_t *flexCounterParam);
 
         private:
 

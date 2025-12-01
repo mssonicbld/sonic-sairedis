@@ -45,14 +45,14 @@ SwitchState::SwitchState(
                 sai_serialize_object_type(RealObjectIdManager::objectTypeQuery(switch_id)).c_str());
     }
 
-    for (int i = SAI_OBJECT_TYPE_NULL; i < (int)SAI_OBJECT_TYPE_EXTENSIONS_MAX; ++i)
+    for (size_t i = 0; i < sai_metadata_enum_sai_object_type_t.valuescount; ++i)
     {
         /*
          * Populate empty maps for each object to avoid checking if
          * objecttype exists.
          */
 
-        m_objectHash[(sai_object_type_t)i] = { };
+        m_objectHash[(sai_object_type_t)sai_metadata_enum_sai_object_type_t.values[i]] = { };
     }
 
     /*
@@ -388,6 +388,36 @@ sai_status_t SwitchState::queryStatsCapability(
     {
         stats_capability->list[i].stat_enum = statenumlist[i];
         stats_capability->list[i].stat_modes = SAI_STATS_MODE_READ_AND_CLEAR;
+    }
+    return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t SwitchState::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    auto info = sai_metadata_get_object_type_info(objectType);
+
+    if (stats_capability->count == 0 || stats_capability->list == nullptr)
+    {
+        stats_capability->count = (uint32_t)info->statenum->valuescount;
+        return SAI_STATUS_BUFFER_OVERFLOW;
+    }
+
+    SWSS_LOG_NOTICE("query counter st capability for object ID %s of counter type %s",
+                    sai_serialize_object_id(switchId).c_str(),
+                    info->statenum->name);
+
+    auto statenumlist = info->statenum->values;
+
+    for (uint32_t i = 0; i < stats_capability->count; i++)
+    {
+        stats_capability->list[i].capability.stat_enum = statenumlist[i];
+        stats_capability->list[i].capability.stat_modes = SAI_STATS_MODE_READ_AND_CLEAR;
+        stats_capability->list[i].minimal_polling_interval = static_cast<uint64_t>(1e6 * 100);
     }
     return SAI_STATUS_SUCCESS;
 }

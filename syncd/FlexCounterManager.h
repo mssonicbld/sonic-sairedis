@@ -10,7 +10,8 @@ namespace syncd
 
             FlexCounterManager(
                     _In_ std::shared_ptr<sairedis::SaiInterface> vendorSai,
-                    _In_ const std::string& dbCounters);
+                    _In_ const std::string& dbCounters,
+                    _In_ const std::string& supportingBulkInstances);
 
             virtual ~FlexCounterManager() = default;
 
@@ -37,6 +38,12 @@ namespace syncd
                     _In_ const std::string& instanceId,
                     _In_ const std::vector<swss::FieldValueTuple>& values);
 
+            void bulkAddCounter(
+                _In_ const std::vector<sai_object_id_t> &vids,
+                _In_ const std::vector<sai_object_id_t> &rids,
+                _In_ const std::string& instanceId,
+                _In_ const std::vector<swss::FieldValueTuple>& values);
+
             void removeCounter(
                     _In_ sai_object_id_t vid,
                     _In_ const std::string& instanceId);
@@ -50,6 +57,8 @@ namespace syncd
                 std::shared_ptr<sairedis::SaiInterface> m_vendorSai;
 
                 std::string m_dbCounters;
+
+                std::string m_supportingBulkGroups;
     };
 }
 

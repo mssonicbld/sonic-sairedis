@@ -103,6 +103,8 @@ namespace syncd
             sai_status_t setRestartWarmOnAllSwitches(
                     _In_ bool flag);
 
+            sai_status_t setFastAPIEnableOnAllSwitches();
+
             sai_status_t setPreShutdownOnAllSwitches();
 
             sai_status_t setUninitDataPlaneOnRemovalOnAllSwitches();
@@ -133,6 +135,12 @@ namespace syncd
 
             sai_status_t processObjectTypeGetAvailabilityQuery(
                     _In_ const swss::KeyOpFieldsValuesTuple &kco);
+
+            sai_status_t processStatsCapabilityQuery(
+                    _In_ const swss::KeyOpFieldsValuesTuple &kco);
+
+            sai_status_t processStatsStCapabilityQuery(
+                _In_ const swss::KeyOpFieldsValuesTuple &kco);
 
             sai_status_t processFdbFlush(
                     _In_ const swss::KeyOpFieldsValuesTuple &kco);
@@ -196,6 +204,18 @@ namespace syncd
                     _In_ uint32_t attr_count,
                     _In_ sai_attribute_t *attr_list);
 
+            sai_status_t processFlexCounterGroupEvent(
+                    _In_ const std::string &key,
+                    _In_ const std::string &op,
+                    _In_ const std::vector<swss::FieldValueTuple> &values,
+                    _In_ bool fromAsicChannel=true);
+
+            sai_status_t processFlexCounterEvent(
+                    _In_ const std::string &key,
+                    _In_ const std::string &op,
+                    _In_ const std::vector<swss::FieldValueTuple> &values,
+                    _In_ bool fromAsicChannel=true);
+
         private: // process quad oid
 
             sai_status_t processOidCreate(
@@ -222,6 +242,20 @@ namespace syncd
         private: // process bulk oid
 
             sai_status_t processBulkOidCreate(
+                    _In_ sai_object_type_t objectType,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _In_ const std::vector<std::string>& objectIds,
+                    _In_ const std::vector<std::shared_ptr<saimeta::SaiAttributeList>>& attributes,
+                    _Out_ std::vector<sai_status_t>& statuses);
+
+            sai_status_t processBulkOidSet(
+                    _In_ sai_object_type_t objectType,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _In_ const std::vector<std::string>& objectIds,
+                    _In_ const std::vector<std::shared_ptr<saimeta::SaiAttributeList>>& attributes,
+                    _Out_ std::vector<sai_status_t>& statuses);
+
+            sai_status_t processBulkOidGet(
                     _In_ sai_object_type_t objectType,
                     _In_ sai_bulk_op_error_mode_t mode,
                     _In_ const std::vector<std::string>& objectIds,
@@ -343,6 +377,13 @@ namespace syncd
                     _In_ sai_status_t status,
                     _In_ uint32_t attr_count,
                     _In_ sai_attribute_t *attr_list);
+
+            void sendBulkGetResponse(
+                    _In_ sai_object_type_t objectType,
+                    _In_ const std::vector<std::string>& strObjectIds,
+                    _In_ sai_status_t status,
+                    _In_ const std::vector<std::shared_ptr<saimeta::SaiAttributeList>>& attributes,
+                    _In_ const std::vector<sai_status_t>& statuses);
 
             void sendNotifyResponse(
                     _In_ sai_status_t status);
@@ -483,6 +524,8 @@ namespace syncd
             std::shared_ptr<swss::DBConnector> m_dbFlexCounter;
             std::shared_ptr<swss::ConsumerTable> m_flexCounter;
             std::shared_ptr<swss::ConsumerTable> m_flexCounterGroup;
+            std::shared_ptr<swss::Table> m_flexCounterTable;
+            std::shared_ptr<swss::Table> m_flexCounterGroupTable;
 
             std::shared_ptr<NotificationProducerBase> m_notifications;
 

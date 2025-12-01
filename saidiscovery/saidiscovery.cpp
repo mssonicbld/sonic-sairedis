@@ -270,6 +270,7 @@ static int discover(
                 case SAI_ATTR_VALUE_TYPE_UINT64:
                 case SAI_ATTR_VALUE_TYPE_POINTER:
                 case SAI_ATTR_VALUE_TYPE_BOOL:
+                case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
                 case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
                 case SAI_ATTR_VALUE_TYPE_MAC:
                     break;
@@ -554,7 +555,7 @@ int main(int argc, char **argv)
 
     auto sai = std::make_shared<saimeta::Meta>(vendorSai);
 
-    sai_status_t status = sai->initialize(0, (sai_service_method_table_t*)&test_services);
+    sai_status_t status = sai->apiInitialize(0, (sai_service_method_table_t*)&test_services);
 
     if (status != SAI_STATUS_SUCCESS)
     {
@@ -665,7 +666,7 @@ int main(int argc, char **argv)
                 sai_serialize_status(status).c_str());
     }
 
-    status = sai->uninitialize();
+    status = sai->apiUninitialize();
 
     if (status != SAI_STATUS_SUCCESS)
     {

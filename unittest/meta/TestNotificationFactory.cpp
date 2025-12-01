@@ -41,7 +41,7 @@ TEST(NotificationFactory, deserialize_port_state_change)
 {
     auto ntf = NotificationFactory::deserialize(
             SAI_SWITCH_NOTIFICATION_NAME_PORT_STATE_CHANGE,
-            "[{\"port_id\":\"oid:0x100000000001a\",\"port_state\":\"SAI_PORT_OPER_STATUS_UP\"}]");
+            "[{\"port_id\":\"oid:0x100000000001a\",\"port_state\":\"SAI_PORT_OPER_STATUS_UP\",\"port_error_status\":\"0\"}]");
 
     EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_PORT_STATE_CHANGE);
 }
@@ -66,6 +66,25 @@ TEST(NotificationFactory, deserialize_queue_pfc_deadlock)
     EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_QUEUE_PFC_DEADLOCK);
 
     EXPECT_EQ(str, ntf->getSerializedNotification());
+}
+
+TEST(NotificationFactory, deserialize_switch_asic_sdk_health_event)
+{
+    auto ntf = NotificationFactory::deserialize(
+        SAI_SWITCH_NOTIFICATION_NAME_SWITCH_ASIC_SDK_HEALTH_EVENT,
+        "{"
+            "\"category\":\"SAI_SWITCH_ASIC_SDK_HEALTH_CATEGORY_FW\","
+            "\"data.data_type\":\"SAI_HEALTH_DATA_TYPE_GENERAL\","
+            "\"description\":\"2:30,30\","
+            "\"severity\":\"SAI_SWITCH_ASIC_SDK_HEALTH_SEVERITY_FATAL\","
+            "\"switch_id\":\"oid:0x21000000000000\","
+            "\"timestamp\":\"{"
+                "\\\"tv_nsec\\\":\\\"28715881\\\","
+                "\\\"tv_sec\\\":\\\"1700042919\\\""
+            "}\""
+        "}");
+
+    EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_SWITCH_ASIC_SDK_HEALTH_EVENT);
 }
 
 TEST(NotificationFactory, deserialize_shutdown_request)
@@ -93,5 +112,21 @@ TEST(NotificationFactory, deserialize_switch_state_change)
 
     EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_SWITCH_STATE_CHANGE);
 
+    EXPECT_EQ(str, ntf->getSerializedNotification());
+}
+
+TEST(NotificationFactory, deserialize_switch_macsec_post_status)
+{
+    auto str = sai_serialize_switch_macsec_post_status_ntf(0x2100000000, SAI_SWITCH_MACSEC_POST_STATUS_PASS);
+    auto ntf = NotificationFactory::deserialize(SAI_SWITCH_NOTIFICATION_NAME_SWITCH_MACSEC_POST_STATUS, str);
+    EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_SWITCH_MACSEC_POST_STATUS);
+    EXPECT_EQ(str, ntf->getSerializedNotification());
+}
+
+TEST(NotificationFactory, deserialize_macsec_post_status)
+{
+    auto str = sai_serialize_macsec_post_status_ntf(0x2100000000, SAI_MACSEC_POST_STATUS_PASS);
+    auto ntf = NotificationFactory::deserialize(SAI_SWITCH_NOTIFICATION_NAME_MACSEC_POST_STATUS, str);
+    EXPECT_EQ(ntf->getNotificationType(), SAI_SWITCH_NOTIFICATION_TYPE_MACSEC_POST_STATUS);
     EXPECT_EQ(str, ntf->getSerializedNotification());
 }

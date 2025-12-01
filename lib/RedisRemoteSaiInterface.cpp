@@ -14,6 +14,8 @@
 #include "meta/PerformanceIntervalTimer.h"
 #include "meta/Globals.h"
 
+#include "swss/tokenize.h"
+
 #include "config.h"
 
 #include <inttypes.h>
@@ -43,7 +45,7 @@ RedisRemoteSaiInterface::RedisRemoteSaiInterface(
 
     m_initialized = false;
 
-    initialize(0, nullptr);
+    apiInitialize(0, nullptr);
 }
 
 RedisRemoteSaiInterface::~RedisRemoteSaiInterface()
@@ -52,11 +54,11 @@ RedisRemoteSaiInterface::~RedisRemoteSaiInterface()
 
     if (m_initialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
-sai_status_t RedisRemoteSaiInterface::initialize(
+sai_status_t RedisRemoteSaiInterface::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -109,7 +111,7 @@ sai_status_t RedisRemoteSaiInterface::initialize(
     return SAI_STATUS_SUCCESS;
 }
 
-sai_status_t RedisRemoteSaiInterface::uninitialize(void)
+sai_status_t RedisRemoteSaiInterface::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
 
@@ -476,6 +478,14 @@ sai_status_t RedisRemoteSaiInterface::setRedisExtensionAttribute(
 
             return SAI_STATUS_SUCCESS;
 
+        case SAI_REDIS_SWITCH_ATTR_FLEX_COUNTER_GROUP:
+            return notifyCounterGroupOperations(objectId,
+                                                reinterpret_cast<sai_redis_flex_counter_group_parameter_t*>(attr->value.ptr));
+
+        case SAI_REDIS_SWITCH_ATTR_FLEX_COUNTER:
+            return notifyCounterOperations(objectId,
+                                           reinterpret_cast<sai_redis_flex_counter_parameter_t*>(attr->value.ptr));
+
         default:
             break;
     }
@@ -483,6 +493,128 @@ sai_status_t RedisRemoteSaiInterface::setRedisExtensionAttribute(
     SWSS_LOG_ERROR("unknown redis extension attribute: %d", attr->id);
 
     return SAI_STATUS_FAILURE;
+}
+
+bool RedisRemoteSaiInterface::isSaiS8ListValidString(
+        _In_ const sai_s8_list_t &s8list)
+{
+    SWSS_LOG_ENTER();
+
+    if (s8list.list != nullptr && s8list.count > 0)
+    {
+        size_t len = strnlen((const char *)s8list.list, s8list.count);
+
+        if (len == (size_t)s8list.count)
+        {
+            return true;
+        }
+        else
+        {
+            SWSS_LOG_ERROR("Count (%u) is different than strnlen (%zu)", s8list.count, len);
+        }
+    }
+
+    return false;
+}
+
+bool RedisRemoteSaiInterface::emplaceStrings(
+        _In_ const sai_s8_list_t &field,
+        _In_ const sai_s8_list_t &value,
+        _Out_ std::vector<swss::FieldValueTuple> &entries)
+{
+    SWSS_LOG_ENTER();
+
+    bool result = false;
+
+    if (isSaiS8ListValidString(field) && isSaiS8ListValidString(value))
+    {
+        entries.emplace_back(std::string((const char*)field.list, field.count), std::string((const char*)value.list, value.count));
+        result = true;
+    }
+
+    return result;
+}
+
+bool RedisRemoteSaiInterface::emplaceStrings(
+        _In_ const char *field,
+        _In_ const sai_s8_list_t &value,
+        _Out_ std::vector<swss::FieldValueTuple> &entries)
+{
+    SWSS_LOG_ENTER();
+
+    bool result = false;
+
+    if (isSaiS8ListValidString(value))
+    {
+        entries.emplace_back(field, std::string((const char*)value.list, value.count));
+        result = true;
+    }
+
+    return result;
+}
+
+sai_status_t RedisRemoteSaiInterface::notifyCounterGroupOperations(
+        _In_ sai_object_id_t objectId,
+        _In_ const sai_redis_flex_counter_group_parameter_t *flexCounterGroupParam)
+{
+    SWSS_LOG_ENTER();
+
+    std::vector<swss::FieldValueTuple> entries;
+
+    if (flexCounterGroupParam == nullptr || !isSaiS8ListValidString(flexCounterGroupParam->counter_group_name))
+    {
+        SWSS_LOG_ERROR("Invalid parameters when handling counter group operation");
+        return SAI_STATUS_FAILURE;
+    }
+
+    std::string key((const char*)flexCounterGroupParam->counter_group_name.list, flexCounterGroupParam->counter_group_name.count);
+
+    emplaceStrings(POLL_INTERVAL_FIELD, flexCounterGroupParam->poll_interval, entries);
+    emplaceStrings(BULK_CHUNK_SIZE_FIELD, flexCounterGroupParam->bulk_chunk_size, entries);
+    emplaceStrings(BULK_CHUNK_SIZE_PER_PREFIX_FIELD, flexCounterGroupParam->bulk_chunk_size_per_prefix, entries);
+    emplaceStrings(STATS_MODE_FIELD, flexCounterGroupParam->stats_mode, entries);
+    emplaceStrings(flexCounterGroupParam->plugin_name, flexCounterGroupParam->plugins, entries);
+    emplaceStrings(FLEX_COUNTER_STATUS_FIELD, flexCounterGroupParam->operation, entries);
+
+    m_recorder->recordGenericCounterPolling(key, entries);
+
+    m_communicationChannel->set(key,
+                                entries,
+                                (entries.size() != 0) ? REDIS_FLEX_COUNTER_COMMAND_SET_GROUP : REDIS_FLEX_COUNTER_COMMAND_DEL_GROUP);
+
+    return waitForResponse(SAI_COMMON_API_SET);
+}
+
+sai_status_t RedisRemoteSaiInterface::notifyCounterOperations(
+        _In_ sai_object_id_t objectId,
+        _In_ const sai_redis_flex_counter_parameter_t *flexCounterParam)
+{
+    SWSS_LOG_ENTER();
+
+    if (flexCounterParam == nullptr || !isSaiS8ListValidString(flexCounterParam->counter_key))
+    {
+        SWSS_LOG_ERROR("Invalid parameters when handling counter operation");
+        return SAI_STATUS_FAILURE;
+    }
+
+    std::vector<swss::FieldValueTuple> entries;
+    std::string key((const char*)flexCounterParam->counter_key.list, flexCounterParam->counter_key.count);
+    std::string command;
+
+    if (emplaceStrings(flexCounterParam->counter_field_name, flexCounterParam->counter_ids, entries))
+    {
+        command = REDIS_FLEX_COUNTER_COMMAND_START_POLL;
+        emplaceStrings(STATS_MODE_FIELD, flexCounterParam->stats_mode, entries);
+    }
+    else
+    {
+        command = REDIS_FLEX_COUNTER_COMMAND_STOP_POLL;
+    }
+
+    m_recorder->recordGenericCounterPolling(key, entries);
+    m_communicationChannel->set(key, entries, command);
+
+    return waitForResponse(SAI_COMMON_API_SET);
 }
 
 sai_status_t RedisRemoteSaiInterface::set(
@@ -649,6 +781,25 @@ sai_status_t RedisRemoteSaiInterface::bulkSet(                                  
 }
 
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
+
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t RedisRemoteSaiInterface::bulkGet(              \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    SWSS_LOG_ENTER();                                       \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
+
 
 sai_status_t RedisRemoteSaiInterface::create(
         _In_ sai_object_type_t object_type,
@@ -1054,7 +1205,7 @@ sai_status_t RedisRemoteSaiInterface::waitForQueryAttributeCapabilityResponse(
     return status;
 }
 
-sai_status_t RedisRemoteSaiInterface::queryAattributeEnumValuesCapability(
+sai_status_t RedisRemoteSaiInterface::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t objectType,
         _In_ sai_attr_id_t attrId,
@@ -1101,18 +1252,18 @@ sai_status_t RedisRemoteSaiInterface::queryAattributeEnumValuesCapability(
     // This query will not put any data into the ASIC view, just into the
     // message queue
 
-    m_recorder->recordQueryAattributeEnumValuesCapability(switchId, objectType, attrId, enumValuesCapability);
+    m_recorder->recordQueryAttributeEnumValuesCapability(switchId, objectType, attrId, enumValuesCapability);
 
     m_communicationChannel->set(switch_id_str, entry, REDIS_ASIC_STATE_COMMAND_ATTR_ENUM_VALUES_CAPABILITY_QUERY);
 
-    auto status = waitForQueryAattributeEnumValuesCapabilityResponse(enumValuesCapability);
+    auto status = waitForQueryAttributeEnumValuesCapabilityResponse(enumValuesCapability);
 
-    m_recorder->recordQueryAattributeEnumValuesCapabilityResponse(status, objectType, attrId, enumValuesCapability);
+    m_recorder->recordQueryAttributeEnumValuesCapabilityResponse(status, objectType, attrId, enumValuesCapability);
 
     return status;
 }
 
-sai_status_t RedisRemoteSaiInterface::waitForQueryAattributeEnumValuesCapabilityResponse(
+sai_status_t RedisRemoteSaiInterface::waitForQueryAttributeEnumValuesCapabilityResponse(
         _Inout_ sai_s32_list_t* enumValuesCapability)
 {
     SWSS_LOG_ENTER();
@@ -1209,16 +1360,6 @@ sai_status_t RedisRemoteSaiInterface::getStats(
     return waitForGetStatsResponse(number_of_counters, counters);
 }
 
-sai_status_t RedisRemoteSaiInterface::queryStatsCapability(
-        _In_ sai_object_id_t switchId,
-        _In_ sai_object_type_t objectType,
-        _Inout_ sai_stat_capability_list_t *stats_capability)
-{
-    SWSS_LOG_ENTER();
-
-    return SAI_STATUS_NOT_IMPLEMENTED;
-}
-
 sai_status_t RedisRemoteSaiInterface::waitForGetStatsResponse(
         _In_ uint32_t number_of_counters,
         _Out_ uint64_t *counters)
@@ -1242,6 +1383,220 @@ sai_status_t RedisRemoteSaiInterface::waitForGetStatsResponse(
         {
             counters[idx] = stoull(fvValue(values[idx]));
         }
+    }
+
+    return status;
+}
+
+sai_status_t RedisRemoteSaiInterface::queryStatsCapability(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t objectType,
+        _Inout_ sai_stat_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    auto switchIdStr = sai_serialize_object_id(switchId);
+    auto objectTypeStr = sai_serialize_object_type(objectType);
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_ERROR("Failed to find stats-capability: switch %s, object type %s", switchIdStr.c_str(), objectTypeStr.c_str());
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    if (stats_capability && stats_capability->list && (stats_capability->count))
+    {
+        // clear input list, since we use serialize to transfer the values
+        for (uint32_t idx = 0; idx < stats_capability->count; idx++)
+	{
+            stats_capability->list[idx].stat_enum = 0;
+            stats_capability->list[idx].stat_modes = 0;
+	}
+    }
+
+    const std::string listSize = std::to_string(stats_capability->count);
+
+    const std::vector<swss::FieldValueTuple> entry =
+    {
+        swss::FieldValueTuple("OBJECT_TYPE", objectTypeStr),
+	swss::FieldValueTuple("LIST_SIZE", listSize)
+    };
+
+    SWSS_LOG_DEBUG(
+            "Query arguments: switch %s, object type: %s, count: %s",
+            switchIdStr.c_str(),
+            objectTypeStr.c_str(),
+            listSize.c_str()
+    );
+
+    // This query will not put any data into the ASIC view, just into the
+    // message queue
+
+    m_recorder->recordQueryStatsCapability(switchId, objectType, stats_capability);
+
+    m_communicationChannel->set(switchIdStr, entry, REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_QUERY);
+
+    auto status = waitForQueryStatsCapabilityResponse(stats_capability);
+
+    m_recorder->recordQueryStatsCapabilityResponse(status, objectType, stats_capability);
+
+    return status;
+}
+
+sai_status_t RedisRemoteSaiInterface::waitForQueryStatsCapabilityResponse(
+        _Inout_ sai_stat_capability_list_t* stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    swss::KeyOpFieldsValuesTuple kco;
+
+    auto status = m_communicationChannel->wait(REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_RESPONSE, kco);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 3)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 3 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const std::string &stat_enum_str = fvValue(values[0]);
+        const std::string &stat_modes_str = fvValue(values[1]);
+        const uint32_t num_capabilities = std::stoi(fvValue(values[2]));
+
+        SWSS_LOG_DEBUG("Received payload: stat_enums = '%s', stat_modes = '%s', count = %d",
+                       stat_enum_str.c_str(), stat_modes_str.c_str(), num_capabilities);
+
+        stats_capability->count = num_capabilities;
+
+        sai_deserialize_stats_capability_list(stats_capability, stat_enum_str, stat_modes_str);
+    }
+    else if (status ==  SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 1)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 1 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const uint32_t num_capabilities = std::stoi(fvValue(values[0]));
+
+        SWSS_LOG_DEBUG("Received payload: count = %u", num_capabilities);
+
+        stats_capability->count = num_capabilities;
+    }
+
+    return status;
+}
+
+sai_status_t RedisRemoteSaiInterface::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    auto switchIdStr = sai_serialize_object_id(switchId);
+    auto objectTypeStr = sai_serialize_object_type(objectType);
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_ERROR("Failed to find stats-capability: switch %s, object type %s", switchIdStr.c_str(), objectTypeStr.c_str());
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    if (stats_capability && stats_capability->list && (stats_capability->count))
+    {
+        // clear input list, since we use serialize to transfer the values
+        for (uint32_t idx = 0; idx < stats_capability->count; idx++)
+        {
+            stats_capability->list[idx].capability.stat_enum = 0;
+            stats_capability->list[idx].capability.stat_modes = 0;
+            stats_capability->list[idx].minimal_polling_interval = 0;
+        }
+    }
+
+    const std::string listSize = std::to_string(stats_capability->count);
+
+    const std::vector<swss::FieldValueTuple> entry =
+        {
+            swss::FieldValueTuple("OBJECT_TYPE", objectTypeStr),
+            swss::FieldValueTuple("LIST_SIZE", listSize)};
+
+    SWSS_LOG_DEBUG(
+        "Query arguments: switch %s, object type: %s, count: %s",
+        switchIdStr.c_str(),
+        objectTypeStr.c_str(),
+        listSize.c_str());
+
+    // This query will not put any data into the ASIC view, just into the
+    // message queue
+
+    m_recorder->recordQueryStatsStCapability(switchId, objectType, stats_capability);
+
+    m_communicationChannel->set(switchIdStr, entry, REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_QUERY);
+
+    auto status = waitForQueryStatsStCapabilityResponse(stats_capability);
+
+    m_recorder->recordQueryStatsStCapabilityResponse(status, objectType, stats_capability);
+
+    return status;
+}
+
+sai_status_t RedisRemoteSaiInterface::waitForQueryStatsStCapabilityResponse(
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    swss::KeyOpFieldsValuesTuple kco;
+
+    auto status = m_communicationChannel->wait(REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_RESPONSE, kco);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 4)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 4 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const std::string &stat_enum_str = fvValue(values[0]);
+        const std::string &stat_modes_str = fvValue(values[1]);
+        const std::string &polling_interval_str = fvValue(values[2]);
+        const uint32_t num_capabilities = std::stoi(fvValue(values[3]));
+
+        SWSS_LOG_DEBUG("Received payload: stat_enums = '%s', stat_modes = '%s', minimal_polling_intervals = '%s' count = %d",
+                       stat_enum_str.c_str(), stat_modes_str.c_str(), polling_interval_str.c_str(), num_capabilities);
+
+        stats_capability->count = num_capabilities;
+
+        sai_deserialize_stats_st_capability_list(stats_capability, stat_enum_str, stat_modes_str, polling_interval_str);
+    }
+    else if (status == SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 1)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 1 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const uint32_t num_capabilities = std::stoi(fvValue(values[0]));
+
+        SWSS_LOG_DEBUG("Received payload: count = %u", num_capabilities);
+
+        stats_capability->count = num_capabilities;
     }
 
     return status;
@@ -1428,6 +1783,77 @@ sai_status_t RedisRemoteSaiInterface::waitForBulkResponse(
     return SAI_STATUS_SUCCESS;
 }
 
+sai_status_t RedisRemoteSaiInterface::waitForBulkGetResponse(
+        _In_ sai_object_type_t objectType,
+        _In_ uint32_t object_count,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _Out_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    swss::KeyOpFieldsValuesTuple kco;
+
+    const auto status = m_communicationChannel->wait(REDIS_ASIC_STATE_COMMAND_GETRESPONSE, kco);
+
+    const auto &values = kfvFieldsValues(kco);
+
+    if (values.size() != object_count)
+    {
+        SWSS_LOG_THROW("wrong number of statuses, got %zu, expected %u", values.size(), object_count);
+    }
+
+    for (size_t idx = 0; idx < values.size(); idx++)
+    {
+        // field = status
+        // value = attrid=attrvalue|...
+
+        const auto& statusStr = fvField(values[idx]);
+        const auto& joined = fvValue(values[idx]);
+
+        const auto v = swss::tokenize(joined, '|');
+
+        std::vector<swss::FieldValueTuple> entries; // attributes per object id
+        entries.reserve(v.size());
+
+        for (size_t i = 0; i < v.size(); i++)
+        {
+            const std::string item = v.at(i);
+
+            auto start = item.find_first_of("=");
+
+            auto field = item.substr(0, start);
+            auto value = item.substr(start + 1);
+
+            entries.emplace_back(field, value);
+        }
+
+        // deserialize statuses for all objects
+        sai_deserialize_status(statusStr, object_statuses[idx]);
+
+        const auto objectStatus = object_statuses[idx];
+
+        if (objectStatus == SAI_STATUS_SUCCESS || objectStatus == SAI_STATUS_BUFFER_OVERFLOW)
+        {
+            const auto countOnly = (objectStatus == SAI_STATUS_BUFFER_OVERFLOW);
+
+            if (values.size() == 0)
+            {
+                SWSS_LOG_THROW("logic error, get response returned 0 values!, send api response or sync/async issue?");
+            }
+
+            SaiAttributeList list(objectType, entries, countOnly);
+
+            // no need for id fix since this is overflow
+            transfer_attributes(objectType, attr_count[idx], list.get_attr_list(), attr_list[idx], countOnly);
+        }
+    }
+
+    m_recorder->recordBulkGenericGetResponse(status, values);
+
+    return status;
+}
+
 sai_status_t RedisRemoteSaiInterface::bulkRemove(
         _In_ sai_object_type_t object_type,
         _In_ uint32_t object_count,
@@ -1505,6 +1931,80 @@ sai_status_t RedisRemoteSaiInterface::bulkSet(
     m_communicationChannel->set(key, entries, REDIS_ASIC_STATE_COMMAND_BULK_SET);
 
     return waitForBulkResponse(SAI_COMMON_API_BULK_SET, (uint32_t)serialized_object_ids.size(), object_statuses);
+}
+
+sai_status_t RedisRemoteSaiInterface::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    std::vector<std::string> serializedObjectIds;
+    serializedObjectIds.reserve(object_count);
+
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        serializedObjectIds.emplace_back(sai_serialize_object_id(object_id[idx]));
+    }
+
+    return bulkGet(object_type, serializedObjectIds, attr_count, attr_list, mode, object_statuses);
+}
+
+sai_status_t RedisRemoteSaiInterface::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ const std::vector<std::string> &serialized_object_ids,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Inout_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    const auto serializedObjectType = sai_serialize_object_type(object_type);
+
+    std::vector<swss::FieldValueTuple> entries;
+    entries.reserve(serialized_object_ids.size());
+
+    for (size_t idx = 0; idx < serialized_object_ids.size(); idx++)
+    {
+        /*
+        * Since user may reuse buffers, then oid list buffers maybe not cleared
+        * and contain some garbage, let's clean them so we send all oids as null to
+        * syncd.
+        */
+
+        Utils::clearOidValues(object_type, attr_count[idx], attr_list[idx]);
+
+        const auto entry = SaiAttributeList::serialize_attr_list(object_type, attr_count[idx], attr_list[idx], false);
+
+        const auto strAttr = Globals::joinFieldValues(entry);
+
+        swss::FieldValueTuple fvt(serialized_object_ids[idx] , strAttr);
+
+        entries.push_back(fvt);
+    }
+
+    /*
+     * We are adding number of entries to actually add ':' to be compatible
+     * with previous
+     */
+
+    const auto key = serializedObjectType + ":" + std::to_string(entries.size());
+
+    m_communicationChannel->set(key, entries, REDIS_ASIC_STATE_COMMAND_BULK_GET);
+
+    m_recorder->recordBulkGenericGet(serializedObjectType, entries);
+
+    const auto object_count = static_cast<uint32_t>(serialized_object_ids.size());
+
+    const auto status = waitForBulkGetResponse(object_type, object_count, attr_count, attr_list, object_statuses);
+
+    return status;
 }
 
 sai_status_t RedisRemoteSaiInterface::bulkCreate(
@@ -1656,7 +2156,7 @@ bool RedisRemoteSaiInterface::isRedisAttribute(
 {
     SWSS_LOG_ENTER();
 
-    if ((objectType != SAI_OBJECT_TYPE_SWITCH) || (attr == nullptr) || (attr->id < SAI_SWITCH_ATTR_CUSTOM_RANGE_START))
+    if ((objectType != SAI_OBJECT_TYPE_SWITCH) || (attr == nullptr) || (attr->id < SAI_SWITCH_ATTR_CUSTOM_RANGE_START) || (attr->id > SAI_SWITCH_ATTR_EXTENSIONS_RANGE_BASE))
     {
         return false;
     }
@@ -1724,6 +2224,27 @@ sai_status_t RedisRemoteSaiInterface::logSet(
     SWSS_LOG_ENTER();
 
     return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t RedisRemoteSaiInterface::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    SWSS_LOG_ENTER();
+
+    if (version)
+    {
+        *version = SAI_API_VERSION;
+
+        // TODO FIXME implement proper query for syncd, currently this is not an issue since swss is not using this API
+
+        SWSS_LOG_WARN("retruning SAI API version %d with sairedis compiled SAI headers, not actual libsai.so", SAI_API_VERSION);
+
+        return SAI_STATUS_SUCCESS;
+    }
+
+    SWSS_LOG_ERROR("version parameter is NULL");
+
+    return SAI_STATUS_INVALID_PARAMETER;
 }
 
 sai_status_t RedisRemoteSaiInterface::sai_redis_notify_syncd(
@@ -1863,6 +2384,21 @@ sai_switch_notifications_t RedisRemoteSaiInterface::syncProcessNotification(
             sai_serialize_object_id(switchId).c_str());
 
     return { };
+}
+
+bool RedisRemoteSaiInterface::containsSwitch(
+        _In_ sai_object_id_t switchId) const
+{
+    SWSS_LOG_ENTER();
+
+    if (!m_switchContainer->contains(switchId))
+    {
+        SWSS_LOG_INFO("context %s failed to find switch %s",
+                m_contextConfig->m_name.c_str(), sai_serialize_object_id(switchId).c_str());
+        return false;
+    }
+
+    return true;
 }
 
 const std::map<sai_object_id_t, swss::TableDump>& RedisRemoteSaiInterface::getTableDump() const

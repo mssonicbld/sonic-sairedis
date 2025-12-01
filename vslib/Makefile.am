@@ -1,8 +1,19 @@
 AM_CXXFLAGS = $(SAIINC) -I$(top_srcdir)/lib -I/usr/include/libnl3
 
+if USE_VPP
+AM_CXXFLAGS += -Ivpp -DUSE_VPP
+endif
+
+CFLAGS_COMMON= -fPIC -pipe -Wall -Wcast-align -Wcast-qual -Wconversion -Wdisabled-optimization -Werror -Wextra -Wfloat-equal -Wformat=2 -Wformat-nonliteral -Wformat-security -Wformat-y2k -Wimport -Winit-self -Wno-inline -Winvalid-pch -Wmissing-field-initializers -Wmissing-format-attribute -Wmissing-include-dirs -Wmissing-noreturn -Wno-aggregate-return -Wno-padded -Wno-switch-enum -Wno-unused-parameter -Wpacked -Wpointer-arith -Wredundant-decls -Wshadow -Wstack-protector -Wstrict-aliasing=3 -Wswitch -Wswitch-default -Wunreachable-code -Wunused -Wvariadic-macros -Wwrite-strings -Wno-switch-default -Wconversion -Wno-psabi -Wcast-align=strict
+
+# TODO fix multiple paths
+AM_CFLAGS = -I/usr/include/vpp_plugins $(SAIINC) -fPIC $(CFLAGS_COMMON) -I.
+
 lib_LTLIBRARIES = libsaivs.la
 
 noinst_LIBRARIES = libSaiVS.a
+
+# TODO: move vppxlate to proper lib and namespaces
 
 libSaiVS_a_SOURCES = \
 					  Buffer.cpp \
@@ -61,81 +72,48 @@ libSaiVS_a_SOURCES = \
 					  VirtualSwitchSaiInterfaceFdb.cpp \
 					  VirtualSwitchSaiInterfacePort.cpp
 
-libsaivs_la_SOURCES = \
-					  sai_vs_acl.cpp \
-					  sai_vs_bfd.cpp \
-					  sai_vs_bmtor.cpp \
-					  sai_vs_bridge.cpp \
-					  sai_vs_buffer.cpp \
-					  sai_vs_counter.cpp \
-					  sai_vs_dash_vip.cpp \
-					  sai_vs_dash_pa_validation.cpp \
-					  sai_vs_dash_vnet.cpp \
-					  sai_vs_dash_outbound_routing.cpp \
-					  sai_vs_dash_outbound_ca_to_pa.cpp \
-					  sai_vs_dash_inbound_routing.cpp \
-					  sai_vs_dash_eni.cpp \
-					  sai_vs_dash_direction_lookup.cpp \
-					  sai_vs_dash_acl.cpp \
-					  sai_vs_debug_counter.cpp\
-					  sai_vs_dtel.cpp \
-					  sai_vs_fdb.cpp \
-					  sai_vs_genericprogrammable.cpp \
-					  sai_vs_hash.cpp \
-					  sai_vs_hostif.cpp \
-					  sai_vs_interfacequery.cpp \
-					  sai_vs_ipmc.cpp \
-					  sai_vs_ipmc_group.cpp \
-					  sai_vs_isolation_group.cpp \
-					  sai_vs_l2mc.cpp \
-					  sai_vs_l2mcgroup.cpp \
-					  sai_vs_lag.cpp \
-					  sai_vs_macsec.cpp \
-					  sai_vs_mcastfdb.cpp \
-					  sai_vs_mirror.cpp \
-					  sai_vs_mpls.cpp \
-					  sai_vs_nat.cpp \
-					  sai_vs_neighbor.cpp \
-					  sai_vs_nexthop.cpp \
-					  sai_vs_nexthopgroup.cpp \
-					  sai_vs_policer.cpp \
-					  sai_vs_port.cpp \
-					  sai_vs_qosmap.cpp \
-					  sai_vs_queue.cpp \
-					  sai_vs_route.cpp \
-					  sai_vs_router_interface.cpp \
-					  sai_vs_rpfgroup.cpp \
-					  sai_vs_samplepacket.cpp \
-					  sai_vs_scheduler.cpp \
-					  sai_vs_schedulergroup.cpp \
-					  sai_vs_srv6.cpp \
-					  sai_vs_stp.cpp \
-					  sai_vs_switch.cpp \
-					  sai_vs_system_port.cpp \
-					  sai_vs_tam.cpp \
-					  sai_vs_tunnel.cpp \
-					  sai_vs_udf.cpp \
-					  sai_vs_virtual_router.cpp \
-					  sai_vs_vlan.cpp \
-					  sai_vs_wred.cpp \
-					  sai_vs_my_mac.cpp \
-					  sai_vs_ipsec.cpp \
-					  sai_vs_ars.cpp \
-					  sai_vs_ars_profile.cpp \
-					  sai_vs_twamp.cpp \
-					  sai_vs_dash_meter.cpp
+if USE_VPP
+libSaiVS_a_SOURCES +=\
+					  vpp/SaiObjectDB.cpp \
+					  vpp/SwitchVpp.cpp \
+					  vpp/SwitchVppAcl.cpp \
+					  vpp/SwitchVppNexthop.cpp \
+					  vpp/SwitchVppUtils.cpp \
+					  vpp/SwitchVppFdb.cpp \
+					  vpp/SwitchVppRif.cpp \
+					  vpp/SwitchVppBfd.cpp \
+					  vpp/SwitchVppHostif.cpp \
+					  vpp/SwitchVppRoute.cpp \
+					  vpp/SwitchVppNbr.cpp \
+					  vpp/SwitchVppSRv6.cpp \
+					  vpp/TunnelManager.cpp \
+					  vpp/vppxlate/SaiVppXlate.c \
+					  vpp/vppxlate/SaiVppStats.c \
+					  vpp/vppxlate/SaiAclStats.c \
+					  vpp/vppxlate/SaiIntfStats.c
+endif
+
+BUILT_SOURCES = sai_vs.cpp
+
+sai_vs.cpp: ../stub.pl $(top_srcdir)/SAI/meta/saimetadata.c
+	../stub.pl -d ../SAI/ -c Sai -n saivs -f sai_vs.cpp -s stub
+
+clean-local:
+	rm -f sai_vs.cpp
+
+libsaivs_la_SOURCES = sai_vs.cpp
 
 libSaiVS_a_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS)
 libSaiVS_a_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON) $(CODE_COVERAGE_CXXFLAGS)
 
 libsaivs_la_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS)
 libsaivs_la_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON) $(CODE_COVERAGE_CXXFLAGS)
-libsaivs_la_LIBADD = -lhiredis -lswsscommon libSaiVS.a $(CODE_COVERAGE_LIBS)
+libsaivs_la_LIBADD = -lhiredis -lswsscommon libSaiVS.a $(CODE_COVERAGE_LIBS) $(VPP_LIBS)
 
 bin_PROGRAMS = tests
 
 tests_SOURCES = tests.cpp
 tests_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON)
-tests_LDADD = -lhiredis -lswsscommon -lpthread libsaivs.la -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta -lzmq
+tests_LDADD = -lhiredis -lswsscommon -lpthread libsaivs.la -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta -lzmq $(VPP_LIBS)
 
 TESTS = tests

@@ -1,4 +1,5 @@
 #include "FlexCounterManager.h"
+#include "VidManager.h"
 
 #include "swss/logger.h"
 
@@ -8,9 +9,11 @@ using namespace syncd;
 
 FlexCounterManager::FlexCounterManager(
         _In_ std::shared_ptr<sairedis::SaiInterface> vendorSai,
-        _In_ const std::string& dbCounters):
+        _In_ const std::string& dbCounters,
+        _In_ const std::string& supportingBulkInstances):
     m_vendorSai(vendorSai),
-    m_dbCounters(dbCounters)
+    m_dbCounters(dbCounters),
+    m_supportingBulkGroups(supportingBulkInstances)
 {
     SWSS_LOG_ENTER();
 
@@ -26,7 +29,8 @@ std::shared_ptr<FlexCounter> FlexCounterManager::getInstance(
 
     if (m_flexCounters.count(instanceId) == 0)
     {
-        auto counter = std::make_shared<FlexCounter>(instanceId, m_vendorSai, m_dbCounters);
+        bool supportingBulk = (m_supportingBulkGroups.find(instanceId) != std::string::npos);
+        auto counter = std::make_shared<FlexCounter>(instanceId, m_vendorSai, m_dbCounters, supportingBulk);
 
         m_flexCounters[instanceId] = counter;
     }
@@ -90,6 +94,26 @@ void FlexCounterManager::addCounter(
     auto fc = getInstance(instanceId);
 
     fc->addCounter(vid, rid, values);
+
+    if (fc->isDiscarded())
+    {
+        removeInstance(instanceId);
+    }
+}
+
+void FlexCounterManager::bulkAddCounter(
+        _In_ const std::vector<sai_object_id_t> &vids,
+        _In_ const std::vector<sai_object_id_t> &rids,
+        _In_ const std::string& instanceId,
+        _In_ const std::vector<swss::FieldValueTuple>& values)
+{
+    SWSS_LOG_ENTER();
+
+    auto fc = getInstance(instanceId);
+
+    sai_object_type_t objectType = VidManager::objectTypeQuery(vids.at(0)); // VID and RID will have the same object type
+
+    fc->bulkAddCounter(objectType, vids, rids, values);
 
     if (fc->isDiscarded())
     {

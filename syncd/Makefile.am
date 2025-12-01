@@ -3,7 +3,7 @@ SUBDIRS = . tests
 AM_CXXFLAGS = $(SAIINC) -I$(top_srcdir)/lib -I$(top_srcdir)/vslib
 
 if SAIVS
-SAILIB=-L$(top_srcdir)/vslib/.libs -lsaivs
+SAILIB=-L$(top_srcdir)/vslib/.libs -lsaivs $(VPP_LIBS)
 else
 SAILIB=-lsai
 endif
@@ -17,6 +17,7 @@ noinst_LIBRARIES = libSyncd.a libSyncdRequestShutdown.a libMdioIpcClient.a
 libSyncd_a_SOURCES = \
 				AsicOperation.cpp \
 				AsicView.cpp \
+				AttrVersionChecker.cpp \
 				BestCandidateFinder.cpp \
 				BreakConfig.cpp \
 				BreakConfigParser.cpp \
@@ -82,6 +83,11 @@ if SONIC_ASIC_PLATFORM_BROADCOM
 libSyncd_a_CXXFLAGS += -DMDIO_ACCESS_USE_NPU
 endif
 
+if SONIC_ASIC_PLATFORM_CLOUNIX
+syncd_CXXFLAGS += -DSAI_SUPPORT_UNINIT_DATA_PLANE_ON_REMOVAL
+libSyncd_a_CXXFLAGS += -DSAI_SUPPORT_UNINIT_DATA_PLANE_ON_REMOVAL
+endif
+
 libSyncdRequestShutdown_a_SOURCES = \
 									RequestShutdown.cpp \
 									RequestShutdownCommandLineOptions.cpp \
@@ -93,7 +99,7 @@ libSyncdRequestShutdown_a_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMO
 syncd_request_shutdown_SOURCES = syncd_request_shutdown.cpp
 syncd_request_shutdown_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS)
 syncd_request_shutdown_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON) $(CODE_COVERAGE_CXXFLAGS)
-syncd_request_shutdown_LDADD = libSyncdRequestShutdown.a $(top_srcdir)/lib/libSaiRedis.a -lhiredis -lswsscommon -lpthread $(CODE_COVERAGE_LIBS)
+syncd_request_shutdown_LDADD = libSyncdRequestShutdown.a $(top_srcdir)/lib/libSaiRedis.a -lhiredis -lswsscommon -lpthread $(CODE_COVERAGE_LIBS) $(VPP_LIBS)
 
 libMdioIpcClient_a_SOURCES = MdioIpcClient.cpp
 
@@ -110,6 +116,18 @@ syncd_tests_SOURCES = tests.cpp
 syncd_tests_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON)
 syncd_tests_LDFLAGS = -Wl,-rpath,$(top_srcdir)/lib/.libs -Wl,-rpath,$(top_srcdir)/meta/.libs
 syncd_tests_LDADD = libSyncd.a -lhiredis -lswsscommon -lpthread -L$(top_srcdir)/lib/.libs -lsairedis \
-			  -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta -lzmq $(CODE_COVERAGE_LIBS)
+			  -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta -lzmq $(CODE_COVERAGE_LIBS) $(VPP_LIBS)
 
 TESTS = syncd_tests
+
+if SAIVS
+if DASHSAI
+bin_PROGRAMS += syncd_dash
+syncd_dash_SOURCES = $(syncd_SOURCES)
+syncd_dash_CPPFLAGS = $(syncd_CPPFLAGS)
+syncd_dash_CXXFLAGS = $(syncd_CXXFLAGS)
+syncd_dash_LDADD = libSyncd.a $(top_srcdir)/lib/libSaiRedis.a -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta \
+			  -ldl -lhiredis -lswsscommon -lsai -lprotobuf -lpiprotobuf -lpiprotogrpc -lgrpc++ -lpthread -lzmq $(CODE_COVERAGE_LIBS) $(EXTRA_LIBSAI_LDFLAGS)
+syncd_dash_LDFLAGS = $(syncd_LDFLAGS)
+endif
+endif

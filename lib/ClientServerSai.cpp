@@ -29,13 +29,13 @@ ClientServerSai::~ClientServerSai()
 
     if (m_apiInitialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
 // INITIALIZE UNINITIALIZE
 
-sai_status_t ClientServerSai::initialize(
+sai_status_t ClientServerSai::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -82,7 +82,7 @@ sai_status_t ClientServerSai::initialize(
         m_sai = std::make_shared<ServerSai>();
     }
 
-    auto status = m_sai->initialize(flags, service_method_table);
+    auto status = m_sai->apiInitialize(flags, service_method_table);
 
     SWSS_LOG_NOTICE("init client/server sai: %s", sai_serialize_status(status).c_str());
 
@@ -94,7 +94,7 @@ sai_status_t ClientServerSai::initialize(
     return status;
 }
 
-sai_status_t ClientServerSai::uninitialize(void)
+sai_status_t ClientServerSai::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
@@ -256,7 +256,25 @@ sai_status_t ClientServerSai::queryStatsCapability(
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
 
-    return SAI_STATUS_NOT_IMPLEMENTED;
+    return m_sai->queryStatsCapability(
+            switchId,
+            objectType,
+            stats_capability);
+}
+
+sai_status_t ClientServerSai::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+        MUTEX();
+        SWSS_LOG_ENTER();
+        REDIS_CHECK_API_INITIALIZED();
+
+        return m_sai->queryStatsStCapability(
+            switchId,
+            objectType,
+            stats_capability);
 }
 
 sai_status_t ClientServerSai::getStatsExt(
@@ -414,6 +432,29 @@ sai_status_t ClientServerSai::bulkSet(
             object_statuses);
 }
 
+sai_status_t ClientServerSai::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->bulkGet(
+            object_type,
+            object_count,
+            object_id,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
 // BULK QUAD ENTRY
 
 #define DECLARE_BULK_CREATE_ENTRY(OT,ot)                    \
@@ -483,6 +524,26 @@ sai_status_t ClientServerSai::bulkSet(                      \
 
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
 
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t ClientServerSai::bulkGet(                      \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    MUTEX();                                                \
+    SWSS_LOG_ENTER();                                       \
+    REDIS_CHECK_API_INITIALIZED();                          \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
+
 // NON QUAD API
 
 sai_status_t ClientServerSai::flushFdbEntries(
@@ -535,7 +596,7 @@ sai_status_t ClientServerSai::queryAttributeCapability(
             capability);
 }
 
-sai_status_t ClientServerSai::queryAattributeEnumValuesCapability(
+sai_status_t ClientServerSai::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switch_id,
         _In_ sai_object_type_t object_type,
         _In_ sai_attr_id_t attr_id,
@@ -545,7 +606,7 @@ sai_status_t ClientServerSai::queryAattributeEnumValuesCapability(
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
 
-    return m_sai->queryAattributeEnumValuesCapability(
+    return m_sai->queryAttributeEnumValuesCapability(
             switch_id,
             object_type,
             attr_id,
@@ -591,4 +652,14 @@ sai_status_t ClientServerSai::logSet(
     REDIS_CHECK_API_INITIALIZED();
 
     return m_sai->logSet(api, log_level);
+}
+
+sai_status_t ClientServerSai::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->queryApiVersion(version);
 }

@@ -34,7 +34,7 @@ namespace syncd
                     _In_ std::shared_ptr<RedisClient> client,
                     _In_ std::shared_ptr<VirtualOidTranslator> translator,
                     _In_ std::shared_ptr<sairedis::SaiInterface> vendorSai,
-                    _In_ bool warmBoot = false);
+                    _In_ bool warmBoot);
 
             virtual ~SaiSwitch() = default;
 
@@ -154,6 +154,14 @@ namespace syncd
                     _Out_ sai_mac_t& mac) const override;
 
             /**
+             * @brief Gets VxLAN default router MAC address.
+             *
+             * @param[out] mac MAC address to be obtained.
+             */
+            virtual void getVxlanDefaultRouterMacAddress(
+                    _Out_ sai_mac_t& mac) const override;
+
+            /**
              * @brief Gets default value of attribute for given object.
              *
              * This applies to objects discovered after switch init like
@@ -182,13 +190,13 @@ namespace syncd
             /**
              * @brief On post port create.
              *
-             * Performs actions needed after port creation. Will discover new
-             * queues, ipgs and scheduler groups that belong to new created port,
+             * Performs actions needed after ports creation. Will discover new
+             * queues, ipgs and scheduler groups that belong to new created ports,
              * and updated ASIC DB accordingly.
              */
-            virtual void onPostPortCreate(
-                    _In_ sai_object_id_t port_rid,
-                    _In_ sai_object_id_t port_vid) override;
+            virtual void onPostPortsCreate(
+                    _In_ size_t count,
+                    _In_ const sai_object_id_t* port_rids) override;
 
             /**
              * @brief Post port remove.
@@ -238,10 +246,26 @@ namespace syncd
             void saiGetMacAddress(
                     _Out_ sai_mac_t &mac) const;
 
+            /**
+             * @brief Get VxLAN default router MAC address.
+             *
+             * Intended use is to get switch VxLAN default route MAC address,
+             * for comparison logic, when we will try to bring it's default
+             * value, in case user changed original MAC address.
+             *
+             * @param[out] mac Obtained MAC address.
+             */
+            void saiGetVxlanDefaultRouterMacAddress(
+                    _Out_ sai_mac_t &mac) const;
+
         private:
 
             void redisSetDummyAsicStateForRealObjectId(
                     _In_ sai_object_id_t rid) const;
+
+            void redisSetDummyAsicStateForRealObjectIds(
+                    _In_ size_t count,
+                    _In_ const sai_object_id_t* rids) const;
 
             /**
              * @brief Put cold boot discovered VIDs to redis DB.
@@ -301,6 +325,7 @@ namespace syncd
             std::string m_hardware_info;
 
             sai_mac_t m_default_mac_address;
+            sai_mac_t m_vxlan_default_router_mac_address;
 
             /*
              * NOTE: Those default value will make sense only when we will do hard

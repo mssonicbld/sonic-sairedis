@@ -69,6 +69,24 @@ std::string sai_serialize_mcast_fdb_entry(
 std::string sai_serialize_fdb_entry(
         _In_ const sai_fdb_entry_t &fdb_entry);
 
+std::string sai_serialize_meter_bucket_entry(
+        _In_ const sai_meter_bucket_entry_t &meter_bucket_entry);
+
+std::string sai_serialize_prefix_compression_entry(
+        _In_ const sai_prefix_compression_entry_t &prefix_compression_entry);
+
+std::string sai_serialize_flow_entry(
+        _In_ const sai_flow_entry_t &flow_entry);
+
+std::string sai_serialize_outbound_port_map_port_range_entry(
+        _In_ const sai_outbound_port_map_port_range_entry_t &outbound_port_map_port_range_entry);
+
+std::string sai_serialize_global_trusted_vni_entry(
+        _In_ const sai_global_trusted_vni_entry_t &global_trusted_vni_entry);
+
+std::string sai_serialize_eni_trusted_vni_entry(
+        _In_ const sai_eni_trusted_vni_entry_t &eni_trusted_vni_entry);
+
 std::string sai_serialize_vlan_id(
         _In_ const sai_vlan_id_t vlan_id);
 
@@ -122,11 +140,20 @@ std::string sai_serialize_ingress_priority_group_attr(
 std::string sai_serialize_buffer_pool_stat(
         _In_ const sai_buffer_pool_stat_t counter);
 
+std::string sai_serialize_eni_stat(
+        _In_ const sai_eni_stat_t counter);
+
+std::string sai_serialize_meter_bucket_entry_stat(
+        _In_ const sai_meter_bucket_entry_stat_t counter);
+
 std::string sai_serialize_tunnel_stat(
         _In_ const sai_tunnel_stat_t counter);
 
 std::string sai_serialize_counter_stat(
         _In_ const sai_counter_stat_t counter);
+
+std::string sai_serialize_policer_stat(
+        _In_ const sai_policer_stat_t counter);
 
 std::string sai_serialize_queue_attr(
         _In_ const sai_queue_attr_t attr);
@@ -204,6 +231,17 @@ std::string sai_serialize_switch_oper_status(
         _In_ sai_object_id_t switch_id,
         _In_ sai_switch_oper_status_t status);
 
+std::string sai_serialize_timespec(
+        _In_ const sai_timespec_t &timespec);
+
+std::string sai_serialize_switch_asic_sdk_health_event(
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_asic_sdk_health_severity_t severity,
+        _In_ const sai_timespec_t &timestamp,
+        _In_ sai_switch_asic_sdk_health_category_t category,
+        _In_ const sai_switch_health_data_t &data,
+        _In_ const sai_u8_list_t &description);
+
 std::string sai_serialize_switch_shutdown_request(
         _In_ sai_object_id_t switch_id);
 
@@ -220,6 +258,12 @@ std::string sai_serialize_number(
         _In_ uint32_t number,
         _In_ bool hex = false);
 
+template <typename T>
+std::string sai_serialize_number_list(
+        _In_ const T& list,
+        _In_ bool countOnly,
+        _In_ bool hex = false);
+
 std::string sai_serialize_attr_id(
         _In_ const sai_attr_metadata_t& meta);
 
@@ -231,6 +275,9 @@ std::string sai_serialize_mac(
 
 std::string sai_serialize_port_oper_status(
         _In_ sai_port_oper_status_t status);
+
+std::string sai_serialize_port_error_status(
+        _In_ sai_port_error_status_t status);
 
 std::string sai_serialize_port_host_tx_ready(
         _In_ sai_port_host_tx_ready_status_t host_tx_ready_status);
@@ -252,6 +299,22 @@ std::string sai_serialize_nat_entry_type(
 
 std::string sai_serialize_qos_map_item(
         _In_ const sai_qos_map_t& qosmap);
+
+std::string sai_serialize_twamp_session_stat(
+        _In_ const sai_twamp_session_stat_t counter);
+
+std::string sai_serialize_poe_port_power_consumption(
+        _In_ const sai_poe_port_power_consumption_t& pppc);
+
+std::string sai_serialize_stats_capability_list(
+        _In_ const sai_stat_capability_list_t& stat_capability_list,
+        _In_ const sai_enum_metadata_t* meta,
+        _In_ bool countOnly);
+
+std::string sai_serialize_stats_st_capability_list(
+        _In_ const sai_stat_st_capability_list_t &stat_capability_list,
+        _In_ const sai_enum_metadata_t *meta,
+        _In_ bool countOnly);
 
 // serialize notifications
 
@@ -275,10 +338,26 @@ std::string sai_serialize_bfd_session_state_ntf(
         _In_ uint32_t count,
         _In_ const sai_bfd_session_state_notification_t* bfd_session_state);
 
+std::string sai_serialize_icmp_echo_session_state_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_icmp_echo_session_state_notification_t* icmp_echo_session_state);
+
+std::string sai_serialize_ha_set_event_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_ha_set_event_data_t* ha_set_event);
+
+std::string sai_serialize_ha_scope_event_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_ha_scope_event_data_t* ha_scope_event);
+
 std::string sai_serialize_port_host_tx_ready_ntf(
         _In_ sai_object_id_t switch_id,
         _In_ sai_object_id_t port_id,
         _In_ sai_port_host_tx_ready_status_t host_tx_ready_status);
+
+std::string sai_serialize_twamp_session_event_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_twamp_session_event_notification_data_t* twamp_session_event);
 
 // sairedis
 
@@ -298,6 +377,20 @@ std::string sai_serialize_redis_link_event_damping_algorithm(
 
 std::string sai_serialize_redis_link_event_damping_aied_config(
          _In_ const sai_redis_link_event_damping_algo_aied_config_t& value);
+
+std::string sai_serialize_switch_macsec_post_status(
+         _In_ const sai_switch_macsec_post_status_t switch_macsec_post_status);
+
+std::string sai_serialize_switch_macsec_post_status_ntf(
+         _In_ sai_object_id_t switch_id,
+         _In_ const sai_switch_macsec_post_status_t switch_macsec_post_status);
+
+std::string sai_serialize_macsec_post_status(
+         _In_ const sai_macsec_post_status_t macsec_post_status);
+
+std::string sai_serialize_macsec_post_status_ntf(
+         _In_ sai_object_id_t macsec_id,
+         _In_ const sai_macsec_post_status_t macsec_post_status);
 
 // deserialize
 
@@ -319,6 +412,19 @@ void sai_deserialize_switch_oper_status(
         _In_ const std::string& s,
         _Out_ sai_object_id_t &switch_id,
         _Out_ sai_switch_oper_status_t& status);
+
+void sai_deserialize_timespec(
+        _In_ const std::string& s,
+        _Out_ sai_timespec_t &timestamp);
+
+void sai_deserialize_switch_asic_sdk_health_event(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t &switch_id,
+        _Out_ sai_switch_asic_sdk_health_severity_t &severity,
+        _Out_ sai_timespec_t &timestamp,
+        _Out_ sai_switch_asic_sdk_health_category_t &category,
+        _Out_ sai_switch_health_data_t &data,
+        _Out_ sai_u8_list_t &description);
 
 void sai_deserialize_switch_shutdown_request(
         _In_ const std::string& s,
@@ -383,6 +489,30 @@ void sai_deserialize_ipmc_entry(
 void sai_deserialize_mcast_fdb_entry(
         _In_ const std::string& s,
         _In_ sai_mcast_fdb_entry_t &mcast_fdb_entry);
+
+void sai_deserialize_meter_bucket_entry(
+        _In_ const std::string& s,
+        _Out_ sai_meter_bucket_entry_t& meter_bucket_entry);
+
+void sai_deserialize_prefix_compression_entry(
+        _In_ const std::string& s,
+        _Out_ sai_prefix_compression_entry_t& prefix_compression_entry);
+
+void sai_deserialize_flow_entry(
+        _In_ const std::string& s,
+        _Out_ sai_flow_entry_t &flow_entry);
+
+void sai_deserialize_outbound_port_map_port_range_entry(
+        _In_ const std::string& s,
+        _Out_ sai_outbound_port_map_port_range_entry_t &outbound_port_map_port_range_entry);
+
+void sai_deserialize_global_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_global_trusted_vni_entry_t &global_trusted_vni_entry);
+
+void sai_deserialize_eni_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_eni_trusted_vni_entry_t &eni_trusted_vni_entry);
 
 void sai_deserialize_vlan_id(
         _In_ const std::string& s,
@@ -462,6 +592,10 @@ void sai_deserialize_chardata(
         _In_ const std::string& s,
         _Out_ char chardata[32]);
 
+void sai_deserialize_poe_port_power_consumption(
+        _In_ const std::string& s,
+        _Out_ sai_poe_port_power_consumption_t& pppc);
+
 // deserialize notifications
 
 void sai_deserialize_fdb_event_ntf(
@@ -489,12 +623,33 @@ void sai_deserialize_bfd_session_state_ntf(
         _Out_ uint32_t &count,
         _Out_ sai_bfd_session_state_notification_t** bfdsession);
 
+
+void sai_deserialize_icmp_echo_session_state_ntf(
+       _In_ const std::string& s,
+       _Out_ uint32_t &count,
+       _Out_ sai_icmp_echo_session_state_notification_t** icmp_echo_session);
+
+void sai_deserialize_ha_set_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_ha_set_event_data_t** ha_set_event);
+
+void sai_deserialize_ha_scope_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_ha_scope_event_data_t** ha_scope_event);
+
 void sai_deserialize_port_host_tx_ready_ntf(
         _In_ const std::string& s,
         _Out_ sai_object_id_t& switch_id,
         _Out_ sai_object_id_t& port_id,
         _Out_ sai_port_host_tx_ready_status_t& host_tx_ready_status);
 
+
+void sai_deserialize_twamp_session_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_twamp_session_event_notification_data_t** twamp_session_data);
 
 // free methods
 
@@ -524,9 +679,28 @@ void sai_deserialize_free_bfd_session_state_ntf(
         _In_ uint32_t count,
         _In_ sai_bfd_session_state_notification_t* bfdsessionstate);
 
+void sai_deserialize_free_icmp_echo_session_state_ntf(
+        _In_ uint32_t count,
+        _In_ sai_icmp_echo_session_state_notification_t* icmp_echo_session_state);
+
+void sai_deserialize_free_ha_set_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_ha_set_event_data_t* ha_set_event);
+
+void sai_deserialize_free_ha_scope_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_ha_scope_event_data_t* ha_scope_event);
+
+void sai_deserialize_free_switch_asic_sdk_health_event(
+        _In_ sai_u8_list_t &description);
+
 void sai_deserialize_ingress_priority_group_attr(
         _In_ const std::string& s,
         _Out_ sai_ingress_priority_group_attr_t& attr);
+
+void sai_deserialize_free_twamp_session_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_twamp_session_event_notification_data_t* twamp_session_event);
 
 void sai_deserialize_queue_attr(
         _In_ const std::string& s,
@@ -566,3 +740,32 @@ void sai_deserialize_redis_link_event_damping_algorithm(
 void sai_deserialize_redis_link_event_damping_aied_config(
         _In_ const std::string& s,
          _Out_ sai_redis_link_event_damping_algo_aied_config_t& value);
+
+void sai_deserialize_stats_capability_list(
+        _Inout_ sai_stat_capability_list_t *stats_capability,
+        _In_    const std::string& stat_enum_str,
+        _In_    const std::string& stat_modes_str);
+
+void sai_deserialize_stats_st_capability_list(
+        _Inout_ sai_stat_st_capability_list_t *stats_capability,
+        _In_ const std::string &stat_enum_str,
+        _In_ const std::string &stat_modes_str,
+        _In_ const std::string &minimal_polling_interval_str);
+
+void sai_deserialize_switch_macsec_post_status(
+        _In_ const std::string& s,
+        _Out_ sai_switch_macsec_post_status_t& switch_macsec_post_status);
+
+void sai_deserialize_switch_macsec_post_status_ntf(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t& switch_id,
+        _Out_ sai_switch_macsec_post_status_t& switch_macsec_post_status);
+
+void sai_deserialize_macsec_post_status(
+        _In_ const std::string& s,
+        _Out_ sai_macsec_post_status_t& macsec_post_status);
+
+void sai_deserialize_macsec_post_status_ntf(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t& macsec_id,
+        _Out_ sai_macsec_post_status_t& macsec_post_status);

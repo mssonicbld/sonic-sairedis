@@ -17,6 +17,11 @@ AX_ADD_AM_MACRO_STATIC([])
 
 AM_CONDITIONAL(SONIC_ASIC_PLATFORM_BAREFOOT,   test x$CONFIGURED_PLATFORM = xbarefoot)
 AM_CONDITIONAL(SONIC_ASIC_PLATFORM_BROADCOM,   test x$CONFIGURED_PLATFORM = xbroadcom)
+AM_CONDITIONAL(SONIC_ASIC_PLATFORM_MELLANOX,   test x$CONFIGURED_PLATFORM = xmellanox)
+AM_CONDITIONAL(SONIC_ASIC_PLATFORM_CLOUNIX,   test x$CONFIGURED_PLATFORM = xclounix)
+
+AM_COND_IF([SONIC_ASIC_PLATFORM_MELLANOX],
+           AC_DEFINE([MELLANOX], [1], [Define to 1 on Mellanox Platform]))
 
 AC_ARG_ENABLE(debug,
 [  --enable-debug          turn on debugging],
@@ -40,6 +45,11 @@ AC_ARG_WITH(sai,
 	*) AC_MSG_ERROR(bad value ${withval} for --with-sai) ;;
 esac])
 AM_CONDITIONAL(SAIVS,   test x$sai = xvs)
+
+AC_ARG_WITH(dashsai,
+    [ --with-dashsai         compiling against DASH SAI],
+    [AM_CONDITIONAL(DASHSAI,   true)],
+    [AM_CONDITIONAL(DASHSAI,   false)])
 
 AC_ARG_WITH(swss-common-inc,
 [  --with-swss-common-inc=DIR
@@ -113,6 +123,7 @@ if test "x$asan_enabled" = "xtrue"; then
     CFLAGS_ASAN+=" -fsanitize=address"
     CFLAGS_ASAN+=" -DASAN_ENABLED"
     CFLAGS_ASAN+=" -ggdb -fno-omit-frame-pointer -U_FORTIFY_SOURCE"
+    CFLAGS_ASAN+=" -Wno-maybe-uninitialized"
     AC_SUBST(CFLAGS_ASAN)
 
     LDFLAGS_ASAN+=" -lasan"
@@ -138,7 +149,7 @@ fi
 AM_CONDITIONAL(ASAN_ENABLED, test x$asan_enabled = xtrue)
 AM_CONDITIONAL(PYTHON2, test x$python2 = xtrue)
 
-AC_PATH_PROGS(SWIG, [swig3.0 swig])
+AC_PATH_PROGS(SWIG, [swig4.0 swig3.0 swig])
 
 CXXFLAGS_COMMON=""
 CXXFLAGS_COMMON+=" -ansi"
@@ -207,6 +218,11 @@ CXXFLAGS="$SAVED_FLAGS"
 
 AC_SUBST(CXXFLAGS_COMMON)
 
+# -lvlibapi -lvapiclient -lvppapiclient -lvlibmemoryclient -lsvm -lvppinfra -lvlib -lvatplugin
+# -lvapiclient -lsvm -lvatplugin
+AC_CHECK_LIB([vlib], [main], [AC_SUBST(VPP_LIBS, "-lvlib -lvlibapi -lvppapiclient -lvlibmemoryclient -lvppinfra")])
+AM_CONDITIONAL([USE_VPP], [test "x$VPP_LIBS" != "x"])
+
 AC_ARG_WITH(extra-libsai-ldflags,
 [  --with-extra-libsai-ldflags=FLAGS
                           extra libsai.so flags for vendor library],
@@ -257,11 +273,21 @@ AC_MSG_ERROR("SAI headers API version and library version mismatch")])],
 CXXFLAGS="$SAVED_FLAGS"
 ])])
 
-AM_COND_IF([SYNCD], [
-SAVED_FLAGS="$CXXFLAGS"
-CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta"
-AC_CHECK_FUNCS(sai_bulk_object_clear_stats sai_bulk_object_get_stats)
-CXXFLAGS="$SAVED_FLAGS"
+AM_COND_IF([SAIVS],
+[
+    AC_DEFINE([HAVE_SAI_BULK_OBJECT_CLEAR_STATS], [1], [])
+    AC_DEFINE([HAVE_SAI_BULK_OBJECT_GET_STATS], [1], [])
+    AC_DEFINE([HAVE_SAI_QUERY_STATS_ST_CAPABILITY], [1], [])
+    AC_DEFINE([HAVE_SAI_TAM_TELEMETRY_GET_DATA], [1], [])
+],
+[
+    AM_COND_IF([SYNCD], [
+    SAVED_FLAGS="$CXXFLAGS"
+    CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta"
+    AC_CHECK_FUNCS(sai_bulk_object_clear_stats sai_bulk_object_get_stats sai_tam_telemetry_get_data)
+    AH_TEMPLATE([HAVE_SAI_QUERY_STATS_ST_CAPABILITY], [Force it disabled for SAIs without implementation - REMOVE WHEN NOT NEEDED])
+    CXXFLAGS="$SAVED_FLAGS"
+    ])
 ])
 
 AC_DEFINE([SAIREDIS_GIT_REVISION],
@@ -284,11 +310,14 @@ AC_OUTPUT(Makefile
           saidiscovery/Makefile
           saiasiccmp/Makefile
           tests/Makefile
+          proxylib/Makefile
           unittest/Makefile
           unittest/meta/Makefile
           unittest/lib/Makefile
           unittest/vslib/Makefile
           unittest/syncd/Makefile
+          unittest/proxylib/Makefile
+          unittest/saidump/Makefile
           pyext/Makefile
           pyext/py2/Makefile
           pyext/py3/Makefile)

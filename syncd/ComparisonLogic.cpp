@@ -3131,6 +3131,21 @@ void ComparisonLogic::applyViewTransition(
 
     for (auto &obj: temp.m_soAll)
     {
+        /*
+         * Make sure we will create all neighbor entries before next hop that
+         * have the same IP address as neighbor entry. In Broadcom platform
+         * neighbor entry needs to be created before next hop with the same ip
+         * address otherwise create next hop will fail (hardware limitation?).
+         */
+
+        if (obj.second->getObjectType() == SAI_OBJECT_TYPE_NEIGHBOR_ENTRY)
+        {
+            processObjectForViewTransition(current, temp, obj.second);
+        }
+    }
+
+    for (auto &obj: temp.m_soAll)
+    {
         if (obj.second->getObjectType() != SAI_OBJECT_TYPE_ROUTE_ENTRY)
         {
             processObjectForViewTransition(current, temp, obj.second);
@@ -3281,9 +3296,11 @@ void ComparisonLogic::logViewObjectCount(
 
     bool asic_changes = false;
 
-    for (int i = SAI_OBJECT_TYPE_NULL + 1; i < SAI_OBJECT_TYPE_EXTENSIONS_MAX; i++)
+    // skip null object type
+
+    for (size_t i = 1; i < sai_metadata_enum_sai_object_type_t.valuescount; ++i)
     {
-        sai_object_type_t ot = (sai_object_type_t)i;
+        sai_object_type_t ot = (sai_object_type_t)sai_metadata_enum_sai_object_type_t.values[i];
 
         size_t c = currentView.getObjectsByObjectType(ot).size();
         size_t t = temporaryView.getObjectsByObjectType(ot).size();
@@ -3584,6 +3601,10 @@ sai_status_t ComparisonLogic::asic_handle_generic(
 
                 if (Workaround::isSetAttributeWorkaround(meta_key.objecttype, attr_list->id, status))
                 {
+                    return SAI_STATUS_SUCCESS;
+                }
+
+                if (Workaround::isSetAttributeWorkaroundDuringApplyView(current, object_id, attr_list->id, status)) {
                     return SAI_STATUS_SUCCESS;
                 }
 

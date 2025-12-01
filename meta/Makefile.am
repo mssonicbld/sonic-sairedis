@@ -32,10 +32,18 @@ libsaimeta_la_SOURCES = \
 				NotificationNatEvent.cpp \
 				NotificationPortStateChange.cpp \
 				NotificationQueuePfcDeadlock.cpp \
+				NotificationSwitchAsicSdkHealthEvent.cpp \
 				NotificationSwitchShutdownRequest.cpp \
 				NotificationSwitchStateChange.cpp \
 				NotificationBfdSessionStateChange.cpp \
+				NotificationIcmpEchoSessionStateChange.cpp \
+				NotificationHaSetEvent.cpp \
+				NotificationHaScopeEvent.cpp \
+				NotificationTwampSessionEvent.cpp \
 				NotificationPortHostTxReadyEvent.cpp \
+				NotificationTamTelTypeConfigChange.cpp \
+				NotificationSwitchMacsecPostStatus.cpp \
+				NotificationMacsecPostStatus.cpp \
 				NumberOidIndexGenerator.cpp \
 				OidRefCounter.cpp \
 				PerformanceIntervalTimer.cpp \
@@ -48,6 +56,7 @@ libsaimeta_la_SOURCES = \
 				SaiObjectCollection.cpp \
 				SaiSerialize.cpp \
 				SelectableChannel.cpp \
+				DummySaiInterface.cpp \
 				ZeroMQSelectableChannel.cpp
 
 libsaimeta_la_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS)

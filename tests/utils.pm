@@ -48,19 +48,19 @@ sub flush_redis
 sub start_syncd
 {
     print color('bright_blue') . "Starting syncd" . color('reset') . "\n";
-    `./vssyncd -SUu -p "$DIR/vsprofile.ini" @_ >/dev/null 2>/dev/null &`;
+    `./vssyncd -aSUu -p "$DIR/vsprofile.ini" @_ >/dev/null 2>/dev/null &`;
 }
 
 sub start_syncd_bulk
 {
     print color('bright_blue') . "Starting syncd bulk" . color('reset') . "\n";
-    `./vssyncd -SUul -p "$DIR/vsprofile.ini" @_ >/dev/null 2>/dev/null &`;
+    `./vssyncd -aSUul -p "$DIR/vsprofile.ini" @_ >/dev/null 2>/dev/null &`;
 }
 
 sub start_syncd_warm
 {
     print color('bright_blue') . "Starting syncd warm" . color('reset') . "\n";
-    `./vssyncd -SUu -t warm -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
+    `./vssyncd -aSUu -t warm -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
 
     sleep 1;
 }
@@ -68,13 +68,13 @@ sub start_syncd_warm
 sub sync_start_syncd
 {
     print color('bright_blue') . "Starting syncd" . color('reset') . "\n";
-    `./vssyncd -s -SUu -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
+    `./vssyncd -s -aSUu -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
 }
 
 sub sync_start_syncd_warm
 {
     print color('bright_blue') . "Starting syncd warm" . color('reset') . "\n";
-    `./vssyncd -s -SUu -t warm -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
+    `./vssyncd -s -aSUu -t warm -p "$DIR/vsprofile.ini" >/dev/null 2>/dev/null &`;
 
     sleep 1;
 }
@@ -83,6 +83,14 @@ sub request_warm_shutdown
 {
     print color('bright_blue') . "Requesting syncd warm shutdown" . color('reset') . "\n";
     `../syncd/syncd_request_shutdown -w`;
+
+    sleep 2;
+}
+
+sub request_cold_shutdown
+{
+    print color('bright_blue') . "Requesting syncd cold shutdown" . color('reset') . "\n";
+    `../syncd/syncd_request_shutdown -c`;
 
     sleep 2;
 }
@@ -200,7 +208,8 @@ BEGIN
 {
     our @ISA    = qw(Exporter);
     our @EXPORT = qw/ color
-    kill_syncd flush_redis start_syncd play fresh_start fresh_start_bulk start_syncd_warm request_warm_shutdown
+    kill_syncd flush_redis start_syncd play fresh_start fresh_start_bulk
+    start_syncd_warm request_warm_shutdown request_cold_shutdown
     sync_start_syncd sync_fresh_start sync_start_syncd_warm sync_start_syncd sync_play
     /;
 

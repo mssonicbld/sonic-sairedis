@@ -8,13 +8,20 @@
 
 #include <inttypes.h>
 
+#include <boost/algorithm/string/join.hpp>
+
 #include <set>
 
 // TODO add validation for all oids belong to the same switch
 
-#define MAX_LIST_COUNT 0x1000
+#define MAX_LIST_COUNT (0x1<<24) // 16M
 
 #define CHECK_STATUS_SUCCESS(s) { if ((s) != SAI_STATUS_SUCCESS) return (s); }
+
+#define CHECK_STATUS_SUCCESS_MODE(s,m)                                                          \
+{                                                                                               \
+    if ((s) != SAI_STATUS_SUCCESS && m != SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR) return (s);      \
+}                                                                                               \
 
 #define VALIDATION_LIST(md,vlist)                                               \
 {                                                                               \
@@ -23,6 +30,14 @@
     {                                                                           \
         return _status;                                                         \
     }                                                                           \
+}
+#define VALIDATION_STATS_LIST(cnt,lst)                                                          \
+{                                                                                               \
+    if ((cnt > MAX_LIST_COUNT) || ((cnt == 0) && (lst != NULL)) || ((cnt > 0) && (lst == NULL)))\
+    {                                                                                           \
+        SWSS_LOG_ERROR("Invalid list and list-count");                                          \
+        return SAI_STATUS_INVALID_PARAMETER;                                                    \
+    }                                                                                           \
 }
 
 #define VALIDATION_LIST_GET(md, list)                                                       \
@@ -146,20 +161,20 @@ Meta::Meta(
     m_warmBoot = false;
 }
 
-sai_status_t Meta::initialize(
+sai_status_t Meta::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
     SWSS_LOG_ENTER();
 
-    return m_implementation->initialize(flags, service_method_table);
+    return m_implementation->apiInitialize(flags, service_method_table);
 }
 
-sai_status_t Meta::uninitialize(void)
+sai_status_t Meta::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
 
-    return m_implementation->uninitialize();
+    return m_implementation->apiUninitialize();
 }
 
 void Meta::meta_warm_boot_notify()
@@ -613,14 +628,14 @@ sai_status_t Meta::bulkCreate(                                                  
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
     {                                                                                                                   \
         sai_status_t status = meta_sai_validate_ ##ot (&ot[idx], true);                                                 \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
         sai_object_meta_key_t meta_key = {                                                                              \
             .objecttype = (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                                                    \
             .objectkey = { .key = { .ot = ot[idx] } }                                                                   \
              };                                                                                                         \
         vmk.push_back(meta_key);                                                                                        \
         status = meta_generic_validation_create(meta_key, ot[idx].switch_id, attr_count[idx], attr_list[idx]);          \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
     }                                                                                                                   \
     auto status = m_implementation->bulkCreate(object_count, ot, attr_count, attr_list, mode, object_statuses);         \
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
@@ -657,14 +672,14 @@ sai_status_t Meta::bulkRemove(                                                  
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
     {                                                                                                                   \
         sai_status_t status = meta_sai_validate_ ##ot (&ot[idx], false);                                                \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
         sai_object_meta_key_t meta_key = {                                                                              \
             .objecttype = (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                                                    \
             .objectkey = { .key = { .ot = ot[idx] } }                                                                   \
             };                                                                                                          \
         vmk.push_back(meta_key);                                                                                        \
         status = meta_generic_validation_remove(meta_key);                                                              \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
     }                                                                                                                   \
     auto status = m_implementation->bulkRemove(object_count, ot, mode, object_statuses);                                \
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
@@ -703,14 +718,14 @@ sai_status_t Meta::bulkSet(                                                     
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
     {                                                                                                                   \
         sai_status_t status = meta_sai_validate_ ##ot (&ot[idx], false);                                                \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
         sai_object_meta_key_t meta_key = {                                                                              \
             .objecttype = (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                                                    \
             .objectkey = { .key = { .ot = ot[idx] } }                                                                   \
              };                                                                                                         \
         vmk.push_back(meta_key);                                                                                        \
         status = meta_generic_validation_set(meta_key, &attr_list[idx]);                                                \
-        CHECK_STATUS_SUCCESS(status);                                                                                   \
+        CHECK_STATUS_SUCCESS_MODE(status, mode);                                                                        \
     }                                                                                                                   \
     auto status = m_implementation->bulkSet(object_count, ot, attr_list, mode, object_statuses);                        \
     for (uint32_t idx = 0; idx < object_count; idx++)                                                                   \
@@ -723,9 +738,26 @@ sai_status_t Meta::bulkSet(                                                     
     return status;                                                                                                      \
 }
 
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t Meta::bulkGet(                                 \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    SWSS_LOG_ENTER();                                       \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_CREATE_ENTRY);
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_REMOVE_ENTRY);
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
 
 sai_status_t Meta::objectTypeGetAvailability(
         _In_ sai_object_id_t switchId,
@@ -854,7 +886,7 @@ sai_status_t Meta::queryAttributeCapability(
     return status;
 }
 
-sai_status_t Meta::queryAattributeEnumValuesCapability(
+sai_status_t Meta::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t objectType,
         _In_ sai_attr_id_t attrId,
@@ -892,7 +924,7 @@ sai_status_t Meta::queryAattributeEnumValuesCapability(
         return SAI_STATUS_INVALID_PARAMETER;
     }
 
-    auto status = m_implementation->queryAattributeEnumValuesCapability(switchId, objectType, attrId, enumValuesCapability);
+    auto status = m_implementation->queryAttributeEnumValuesCapability(switchId, objectType, attrId, enumValuesCapability);
 
     if (status == SAI_STATUS_SUCCESS)
     {
@@ -906,7 +938,7 @@ sai_status_t Meta::queryAattributeEnumValuesCapability(
 
                 if (!sai_metadata_is_allowed_enum_value(mdp, val))
                 {
-                    SWSS_LOG_ERROR("returned value %d is not allowed on %s", val, mdp->attridname);
+                    SWSS_LOG_WARN("returned value %d is not allowed on %s", val, mdp->attridname);
                 }
             }
         }
@@ -986,37 +1018,6 @@ sai_status_t Meta::meta_validate_stats(
     return SAI_STATUS_SUCCESS;
 }
 
-sai_status_t Meta::meta_validate_query_stats_capability(
-        _In_ sai_object_type_t object_type,
-        _In_ sai_object_id_t object_id)
-{
-    SWSS_LOG_ENTER();
-
-    PARAMETER_CHECK_OBJECT_TYPE_VALID(object_type);
-    PARAMETER_CHECK_OID_OBJECT_TYPE(object_id, object_type);
-    PARAMETER_CHECK_OID_EXISTS(object_id, object_type);
-
-    sai_object_id_t switch_id = switchIdQuery(object_id);
-
-    // checks also if object type is OID
-    sai_status_t status = meta_sai_validate_oid(object_type, &object_id, switch_id, false);
-
-    CHECK_STATUS_SUCCESS(status);
-
-    auto info = sai_metadata_get_object_type_info(object_type);
-
-    PARAMETER_CHECK_IF_NOT_NULL(info);
-
-    if (info->statenum == nullptr)
-    {
-        SWSS_LOG_ERROR("%s does not support stats", info->objecttypename);
-
-        return SAI_STATUS_INVALID_PARAMETER;
-    }
-
-    return SAI_STATUS_SUCCESS;
-}
-
 sai_status_t Meta::getStats(
         _In_ sai_object_type_t object_type,
         _In_ sai_object_id_t object_id,
@@ -1044,11 +1045,55 @@ sai_status_t Meta::queryStatsCapability(
 {
     SWSS_LOG_ENTER();
 
-    auto status = meta_validate_query_stats_capability(objectType, switchId);
+    PARAMETER_CHECK_OID_OBJECT_TYPE(switchId, SAI_OBJECT_TYPE_SWITCH);
+    PARAMETER_CHECK_OID_EXISTS(switchId, SAI_OBJECT_TYPE_SWITCH);
+    PARAMETER_CHECK_OBJECT_TYPE_VALID(objectType);
+    PARAMETER_CHECK_IF_NOT_NULL(stats_capability);
+    VALIDATION_STATS_LIST(stats_capability->count, stats_capability->list);
 
-    CHECK_STATUS_SUCCESS(status);
+    auto info = sai_metadata_get_object_type_info(objectType);
 
-    status = m_implementation->queryStatsCapability(switchId, objectType, stats_capability);
+    PARAMETER_CHECK_IF_NOT_NULL(info);
+
+    if (info->statenum == nullptr)
+    {
+        SWSS_LOG_ERROR("%s does not support stats", info->objecttypename);
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    auto status = m_implementation->queryStatsCapability(switchId, objectType, stats_capability);
+
+    // no post validation required
+
+    return status;
+}
+
+sai_status_t Meta::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    PARAMETER_CHECK_OID_OBJECT_TYPE(switchId, SAI_OBJECT_TYPE_SWITCH);
+    PARAMETER_CHECK_OID_EXISTS(switchId, SAI_OBJECT_TYPE_SWITCH);
+    PARAMETER_CHECK_OBJECT_TYPE_VALID(objectType);
+    PARAMETER_CHECK_IF_NOT_NULL(stats_capability);
+    VALIDATION_STATS_LIST(stats_capability->count, stats_capability->list);
+
+    auto info = sai_metadata_get_object_type_info(objectType);
+
+    PARAMETER_CHECK_IF_NOT_NULL(info);
+
+    if (info->statenum == nullptr)
+    {
+        SWSS_LOG_ERROR("%s does not support stats", info->objecttypename);
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    auto status = m_implementation->queryStatsStCapability(switchId, objectType, stats_capability);
 
     // no post validation required
 
@@ -1166,7 +1211,7 @@ sai_status_t Meta::bulkRemove(
     {
         sai_status_t status = meta_sai_validate_oid(object_type, &object_id[idx], SAI_NULL_OBJECT_ID, false);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
 
         sai_object_meta_key_t meta_key = { .objecttype = object_type, .objectkey = { .key = { .object_id  = object_id[idx] } } };
 
@@ -1174,7 +1219,7 @@ sai_status_t Meta::bulkRemove(
 
         status = meta_generic_validation_remove(meta_key);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
     }
 
     auto status = m_implementation->bulkRemove(object_type, object_count, object_id, mode, object_statuses);
@@ -1228,7 +1273,7 @@ sai_status_t Meta::bulkSet(
     {
         sai_status_t status = meta_sai_validate_oid(object_type, &object_id[idx], SAI_NULL_OBJECT_ID, false);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
 
         sai_object_meta_key_t meta_key = { .objecttype = object_type, .objectkey = { .key = { .object_id  = object_id[idx] } } };
 
@@ -1236,7 +1281,7 @@ sai_status_t Meta::bulkSet(
 
         status = meta_generic_validation_set(meta_key, &attr_list[idx]);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
     }
 
     auto status = m_implementation->bulkSet(object_type, object_count, object_id, attr_list, mode, object_statuses);
@@ -1246,6 +1291,67 @@ sai_status_t Meta::bulkSet(
         if (object_statuses[idx] == SAI_STATUS_SUCCESS)
         {
             meta_generic_validation_post_set(vmk[idx], &attr_list[idx]);
+        }
+    }
+
+    return status;
+}
+
+sai_status_t Meta::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    PARAMETER_CHECK_IF_NOT_NULL(object_statuses);
+
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        object_statuses[idx] = SAI_STATUS_NOT_EXECUTED;
+    }
+
+    PARAMETER_CHECK_OBJECT_TYPE_VALID(object_type);
+    PARAMETER_CHECK_POSITIVE(object_count);
+    PARAMETER_CHECK_IF_NOT_NULL(attr_count);
+    PARAMETER_CHECK_IF_NOT_NULL(attr_list);
+
+    if (sai_metadata_get_enum_value_name(&sai_metadata_enum_sai_bulk_op_error_mode_t, mode) == nullptr)
+    {
+        SWSS_LOG_ERROR("mode value %d is not in range on %s", mode, sai_metadata_enum_sai_bulk_op_error_mode_t.name);
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    std::vector<sai_object_meta_key_t> vmk;
+
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        sai_status_t status = meta_sai_validate_oid(object_type, &object_id[idx], SAI_NULL_OBJECT_ID, false);
+
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
+
+        sai_object_meta_key_t meta_key = { .objecttype = object_type, .objectkey = { .key = { .object_id  = object_id[idx] } } };
+
+        vmk.push_back(meta_key);
+
+        status = meta_generic_validation_get(meta_key, attr_count[idx], attr_list[idx]);
+
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
+    }
+
+    auto status = m_implementation->bulkGet(object_type, object_count, object_id, attr_count, attr_list, mode, object_statuses);
+
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        if (object_statuses[idx] == SAI_STATUS_SUCCESS)
+        {
+            sai_object_id_t switch_id = switchIdQuery(object_id[idx]);
+            meta_generic_validation_post_get(vmk[idx], switch_id, attr_count[idx], attr_list[idx]);
         }
     }
 
@@ -1310,7 +1416,7 @@ sai_status_t Meta::bulkCreate(
     {
         sai_status_t status = meta_sai_validate_oid(object_type, &object_id[idx], switchId, true);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
 
         // this is create, oid's don't exist yet
 
@@ -1320,7 +1426,7 @@ sai_status_t Meta::bulkCreate(
 
         status = meta_generic_validation_create(meta_key, switchId, attr_count[idx], attr_list[idx]);
 
-        CHECK_STATUS_SUCCESS(status);
+        CHECK_STATUS_SUCCESS_MODE(status, mode);
     }
 
     auto status = m_implementation->bulkCreate(object_type, switchId, object_count, attr_count, attr_list, mode, object_id, object_statuses);
@@ -1375,6 +1481,16 @@ sai_status_t Meta::logSet(
     }
 
     return m_implementation->logSet(api, log_level);
+}
+
+sai_status_t Meta::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    SWSS_LOG_ENTER();
+
+    PARAMETER_CHECK_IF_NOT_NULL(version);
+
+    return m_implementation->queryApiVersion(version);
 }
 
 void Meta::clean_after_switch_remove(
@@ -1668,16 +1784,15 @@ sai_status_t Meta::meta_sai_validate_oid(
 {
     SWSS_LOG_ENTER();
 
-    if (object_type <= SAI_OBJECT_TYPE_NULL ||
-            object_type >= SAI_OBJECT_TYPE_EXTENSIONS_MAX)
+    auto info = sai_metadata_get_object_type_info(object_type);
+
+    if (!info)
     {
         SWSS_LOG_ERROR("invalid object type specified: %d, FIXME", object_type);
         return SAI_STATUS_INVALID_PARAMETER;
     }
 
-    const char* otname =  sai_metadata_get_enum_value_name(&sai_metadata_enum_sai_object_type_t, object_type);
-
-    auto info = sai_metadata_get_object_type_info(object_type);
+    const char* otname =  info->objecttypename;
 
     if (info->isnonobjectid)
     {
@@ -1870,12 +1985,13 @@ void Meta::meta_generic_validation_post_remove(
             case SAI_ATTR_VALUE_TYPE_QOS_MAP_LIST:
             case SAI_ATTR_VALUE_TYPE_MAP_LIST:
             case SAI_ATTR_VALUE_TYPE_IP_ADDRESS_LIST:
+            case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
             case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
             case SAI_ATTR_VALUE_TYPE_INT32_RANGE:
             case SAI_ATTR_VALUE_TYPE_ACL_RESOURCE_LIST:
             case SAI_ATTR_VALUE_TYPE_SEGMENT_LIST:
             case SAI_ATTR_VALUE_TYPE_UINT16_RANGE_LIST:
-	    case SAI_ATTR_VALUE_TYPE_JSON:
+            case SAI_ATTR_VALUE_TYPE_JSON:
                 // no special action required
                 break;
 
@@ -3074,6 +3190,120 @@ sai_status_t Meta::meta_sai_validate_outbound_ca_to_pa_entry(
     return SAI_STATUS_SUCCESS;
 }
 
+sai_status_t Meta::meta_sai_validate_flow_entry(
+        _In_ const sai_flow_entry_t* flow_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (flow_entry == NULL)
+    {
+        SWSS_LOG_ERROR("flow_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t Meta::meta_sai_validate_meter_bucket_entry(
+        _In_ const sai_meter_bucket_entry_t* meter_bucket_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (meter_bucket_entry == NULL)
+    {
+        SWSS_LOG_ERROR("meter_bucket_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t Meta::meta_sai_validate_prefix_compression_entry(
+        _In_ const sai_prefix_compression_entry_t* prefix_compression_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (prefix_compression_entry == NULL)
+    {
+        SWSS_LOG_ERROR("prefix_compression_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t Meta::meta_sai_validate_outbound_port_map_port_range_entry(
+        _In_ const sai_outbound_port_map_port_range_entry_t* outbound_port_map_port_range_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (outbound_port_map_port_range_entry == NULL)
+    {
+        SWSS_LOG_ERROR("outbound_port_map_port_range_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t Meta::meta_sai_validate_global_trusted_vni_entry(
+        _In_ const sai_global_trusted_vni_entry_t* global_trusted_vni_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (global_trusted_vni_entry == NULL)
+    {
+        SWSS_LOG_ERROR("global_trusted_vni_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t Meta::meta_sai_validate_eni_trusted_vni_entry(
+        _In_ const sai_eni_trusted_vni_entry_t* eni_trusted_vni_entry,
+        _In_ bool create,
+        _In_ bool get)
+{
+    SWSS_LOG_ENTER();
+
+    if (eni_trusted_vni_entry == NULL)
+    {
+        SWSS_LOG_ERROR("eni_trusted_vni_entry pointer is NULL");
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    // TODO FIX ME
+
+    return SAI_STATUS_SUCCESS;
+}
+
 sai_status_t Meta::meta_generic_validation_create(
         _In_ const sai_object_meta_key_t& meta_key,
         _In_ sai_object_id_t switch_id,
@@ -3468,7 +3698,7 @@ sai_status_t Meta::meta_generic_validation_create(
                 }
                 break;
 
-	    case SAI_ATTR_VALUE_TYPE_JSON:
+            case SAI_ATTR_VALUE_TYPE_JSON:
                 VALIDATION_LIST(md, value.json.json);
                 break;
 
@@ -3736,64 +3966,7 @@ sai_status_t Meta::meta_generic_validation_create(
 
         // this is conditional attribute, check if it's required
 
-        bool any = false;
-
-        for (size_t index = 0; md.conditions[index] != NULL; index++)
-        {
-            const auto& c = *md.conditions[index];
-
-            // conditions may only be on the same object type
-            const auto& cmd = *sai_metadata_get_attr_metadata(meta_key.objecttype, c.attrid);
-
-            const sai_attribute_value_t* cvalue = cmd.defaultvalue;
-
-            const sai_attribute_t *cattr = sai_metadata_get_attr_by_id(c.attrid, attr_count, attr_list);
-
-            if (cattr != NULL)
-            {
-                META_LOG_DEBUG(md, "condition attr %d was passed, using it's value", c.attrid);
-
-                cvalue = &cattr->value;
-            }
-
-            if (cmd.attrvaluetype == SAI_ATTR_VALUE_TYPE_BOOL)
-            {
-                if (c.condition.booldata == cvalue->booldata)
-                {
-                    META_LOG_DEBUG(md, "bool condition was met on attr %d = %d", cmd.attrid, c.condition.booldata);
-
-                    any = true;
-                    break;
-                }
-            }
-            else // enum condition
-            {
-                int32_t val = cvalue->s32;
-
-                switch (cmd.attrvaluetype)
-                {
-                    case SAI_ATTR_VALUE_TYPE_ACL_FIELD_DATA_INT32:
-                        val = cvalue->aclfield.data.s32;
-                        break;
-
-                    case SAI_ATTR_VALUE_TYPE_ACL_ACTION_DATA_INT32:
-                        val = cvalue->aclaction.parameter.s32;
-                        break;
-
-                    default:
-                        val = cvalue->s32;
-                        break;
-                }
-
-                if (c.condition.s32 == val)
-                {
-                    META_LOG_DEBUG(md, "enum condition was met on attr id %d, val = %d", cmd.attrid, val);
-
-                    any = true;
-                    break;
-                }
-            }
-        }
+        bool any = sai_metadata_is_condition_met(mdp, attr_count, attr_list);
 
         if (!any)
         {
@@ -4573,6 +4746,7 @@ sai_status_t Meta::meta_generic_validation_get(
                 VALIDATION_LIST(md, value.json.json);
                 break;
 
+            case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
             case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
             case SAI_ATTR_VALUE_TYPE_INT32_RANGE:
                 // primitives
@@ -4835,6 +5009,15 @@ void Meta::meta_generic_validation_post_get(
 
             case SAI_ATTR_VALUE_TYPE_JSON:
                 VALIDATION_LIST_GET(md, value.json.json);
+                break;
+
+            case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
+
+                if (value.u16range.min > value.u16range.max)
+                {
+                    META_LOG_ERROR(md, "invalid range %u .. %u", value.u16range.min, value.u16range.max);
+                }
+
                 break;
 
             case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
@@ -5735,6 +5918,7 @@ void Meta::meta_generic_validation_post_create(
             case SAI_ATTR_VALUE_TYPE_QOS_MAP_LIST:
             case SAI_ATTR_VALUE_TYPE_MAP_LIST:
             case SAI_ATTR_VALUE_TYPE_IP_ADDRESS_LIST:
+            case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
             case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
             case SAI_ATTR_VALUE_TYPE_INT32_RANGE:
             case SAI_ATTR_VALUE_TYPE_ACL_RESOURCE_LIST:
@@ -5980,6 +6164,7 @@ void Meta::meta_generic_validation_post_set(
         case SAI_ATTR_VALUE_TYPE_QOS_MAP_LIST:
         case SAI_ATTR_VALUE_TYPE_MAP_LIST:
         case SAI_ATTR_VALUE_TYPE_IP_ADDRESS_LIST:
+        case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
         case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
         case SAI_ATTR_VALUE_TYPE_INT32_RANGE:
         case SAI_ATTR_VALUE_TYPE_ACL_RESOURCE_LIST:
@@ -6513,6 +6698,54 @@ void Meta::meta_sai_on_switch_state_change(
     // we should not snoop switch_id, since switch id should be created directly by user
 }
 
+void Meta::meta_sai_on_switch_asic_sdk_health_event(
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_asic_sdk_health_severity_t severity,
+        _In_ sai_timespec_t timestamp,
+        _In_ sai_switch_asic_sdk_health_category_t category,
+        _In_ sai_switch_health_data_t data,
+        _In_ const sai_u8_list_t description)
+{
+    SWSS_LOG_ENTER();
+
+    if (!sai_metadata_get_enum_value_name(
+            &sai_metadata_enum_sai_switch_asic_sdk_health_severity_t,
+            severity))
+    {
+        SWSS_LOG_WARN("Switch ASIC/SDK health event severity value (%d) not found in sai_switch_asic_sdk_health_severity_t",
+                      severity);
+    }
+
+    if (!sai_metadata_get_enum_value_name(
+            &sai_metadata_enum_sai_switch_asic_sdk_health_category_t,
+            category))
+    {
+        SWSS_LOG_WARN("Switch ASIC/SDK health event category value (%d) not found in sai_switch_asic_sdk_health_severity_t",
+                      category);
+    }
+
+    auto ot = objectTypeQuery(switch_id);
+
+    if (ot != SAI_OBJECT_TYPE_SWITCH)
+    {
+        SWSS_LOG_WARN("switch_id %s is of type %s, but expected SAI_OBJECT_TYPE_SWITCH",
+                sai_serialize_object_id(switch_id).c_str(),
+                sai_serialize_object_type(ot).c_str());
+
+        return;
+    }
+
+    sai_object_meta_key_t switch_meta_key = { .objecttype = ot , .objectkey = { .key = { .object_id = switch_id } } };
+
+    if (!m_saiObjectCollection.objectExists(switch_meta_key))
+    {
+        SWSS_LOG_ERROR("switch_id %s don't exists in local database",
+                sai_serialize_object_id(switch_id).c_str());
+    }
+
+    // we should not snoop switch_id, since switch id should be created directly by user
+}
+
 void Meta::meta_sai_on_switch_shutdown_request(
         _In_ sai_object_id_t switch_id)
 {
@@ -6547,24 +6780,14 @@ void Meta::meta_sai_on_port_state_change_single(
 
     auto ot = objectTypeQuery(data.port_id);
 
-    bool valid = false;
+    bool valid = isPortObjectIdValid(ot);
 
-    switch (ot)
+    if (!valid)
     {
-        // TODO hardcoded types, must advance SAI repository commit to get metadata for this
-        case SAI_OBJECT_TYPE_PORT:
-        case SAI_OBJECT_TYPE_BRIDGE_PORT:
-        case SAI_OBJECT_TYPE_LAG:
-
-            valid = true;
-            break;
-
-        default:
-
-            SWSS_LOG_ERROR("data.port_id %s has unexpected type: %s, expected PORT, BRIDGE_PORT or LAG",
-                    sai_serialize_object_id(data.port_id).c_str(),
-                    sai_serialize_object_type(ot).c_str());
-            break;
+        SWSS_LOG_ERROR("data.port_id %s has unexpected type: %s, expected: %s",
+                sai_serialize_object_id(data.port_id).c_str(),
+                sai_serialize_object_type(ot).c_str(),
+                boost::algorithm::join(getValidPortObjectTypes(), ",").c_str());
     }
 
     if (valid && !m_oids.objectReferenceExists(data.port_id))
@@ -6726,6 +6949,288 @@ void Meta::meta_sai_on_bfd_session_state_change(
     for (uint32_t i = 0; i < count; ++i)
     {
         meta_sai_on_bfd_session_state_change_single(data[i]);
+    }
+}
+
+void Meta::meta_sai_on_ha_set_event_single(
+    _In_ const sai_ha_set_event_data_t& data)
+{
+    SWSS_LOG_ENTER();
+
+    auto ot = objectTypeQuery(data.ha_set_id);
+
+    bool valid = false;
+
+    switch ((int)ot)
+    {
+        // TODO hardcoded types, must advance SAI repository commit to get metadata for this
+        case SAI_OBJECT_TYPE_HA_SET:
+
+            valid = true;
+            break;
+
+        default:
+
+            SWSS_LOG_ERROR("data.ha_set_id %s has unexpected type: %s, expected HA_SET",
+                    sai_serialize_object_id(data.ha_set_id).c_str(),
+                    sai_serialize_object_type(ot).c_str());
+            break;
+    }
+
+    if (valid && !m_oids.objectReferenceExists(data.ha_set_id))
+    {
+        SWSS_LOG_NOTICE("data.ha_set_id new object spotted %s not present in local DB (snoop!)",
+                sai_serialize_object_id(data.ha_set_id).c_str());
+
+        sai_object_meta_key_t key = { .objecttype = ot, .objectkey = { .key = { .object_id = data.ha_set_id } } };
+
+        m_oids.objectReferenceInsert(data.ha_set_id);
+
+        if (!m_saiObjectCollection.objectExists(key))
+        {
+            m_saiObjectCollection.createObject(key);
+        }
+    }
+}
+
+void Meta::meta_sai_on_ha_set_event(
+        _In_ uint32_t count,
+        _In_ const sai_ha_set_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    if (count && data == NULL)
+    {
+        SWSS_LOG_ERROR("sai_ha_set_event_data_t pointer is NULL but count is %u", count);
+        return;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        meta_sai_on_ha_set_event_single(data[i]);
+    }
+}
+
+void Meta::meta_sai_on_ha_scope_event_single(
+        _In_ const sai_ha_scope_event_data_t& data)
+{
+    SWSS_LOG_ENTER();
+
+    auto ot = objectTypeQuery(data.ha_scope_id);
+
+    bool valid = false;
+
+    switch ((int)ot)
+    {
+        // TODO hardcoded types, must advance SAI repository commit to get metadata for this
+        case SAI_OBJECT_TYPE_HA_SCOPE:
+
+            valid = true;
+            break;
+
+        default:
+
+            SWSS_LOG_ERROR("data.ha_scope_id %s has unexpected type: %s, expected HA_SCOPE",
+                    sai_serialize_object_id(data.ha_scope_id).c_str(),
+                    sai_serialize_object_type(ot).c_str());
+            break;
+    }
+
+    if (valid && !m_oids.objectReferenceExists(data.ha_scope_id))
+    {
+        SWSS_LOG_NOTICE("data.ha_scope_id new object spotted %s not present in local DB (snoop!)",
+                sai_serialize_object_id(data.ha_scope_id).c_str());
+
+        sai_object_meta_key_t key = { .objecttype = ot, .objectkey = { .key = { .object_id = data.ha_scope_id } } };
+
+        m_oids.objectReferenceInsert(data.ha_scope_id);
+
+        if (!m_saiObjectCollection.objectExists(key))
+        {
+            m_saiObjectCollection.createObject(key);
+        }
+    }
+}
+
+void Meta::meta_sai_on_ha_scope_event(
+        _In_ uint32_t count,
+        _In_ const sai_ha_scope_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    if (count && data == NULL)
+    {
+        SWSS_LOG_ERROR("sai_ha_scope_event_data_t pointer is NULL but count is %u", count);
+        return;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        meta_sai_on_ha_scope_event_single(data[i]);
+    }
+}
+
+void Meta::meta_sai_on_icmp_echo_session_state_change_single(
+        _In_ const sai_icmp_echo_session_state_notification_t& data)
+{
+    SWSS_LOG_ENTER();
+
+    auto ot = objectTypeQuery(data.icmp_echo_session_id);
+
+    bool valid = isIcmpEchoSessionObjectIdValid(ot);
+
+    if(!valid){
+        SWSS_LOG_ERROR("data.icmp_echo_session_id %s has unexpected type: %s, expected %s",
+                sai_serialize_object_id(data.icmp_echo_session_id).c_str(),
+                sai_serialize_object_type(ot).c_str(),
+                boost::algorithm::join(getValidIcmpEchoSessionObjectTypes(), ",").c_str());
+    }
+
+    if (valid && !m_oids.objectReferenceExists(data.icmp_echo_session_id))
+    {
+        SWSS_LOG_NOTICE("data.icmp_echo_session_id new object spotted %s not present in local DB (snoop!)",
+                sai_serialize_object_id(data.icmp_echo_session_id).c_str());
+
+        sai_object_meta_key_t key = { .objecttype = ot, .objectkey = { .key = { .object_id = data.icmp_echo_session_id } } };
+
+        m_oids.objectReferenceInsert(data.icmp_echo_session_id);
+
+        if (!m_saiObjectCollection.objectExists(key))
+        {
+            m_saiObjectCollection.createObject(key);
+        }
+    }
+}
+
+void Meta::meta_sai_on_icmp_echo_session_state_change(
+        _In_ uint32_t count,
+        _In_ const sai_icmp_echo_session_state_notification_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    if (count && data == NULL)
+    {
+        SWSS_LOG_ERROR("sai_icmp_echo_session_state_notification_t pointer is NULL but count is %u", count);
+        return;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        meta_sai_on_icmp_echo_session_state_change_single(data[i]);
+    }
+}
+
+void Meta::meta_sai_on_twamp_session_event_single(
+        _In_ const sai_twamp_session_event_notification_data_t& data)
+{
+    SWSS_LOG_ENTER();
+
+    auto ot = objectTypeQuery(data.twamp_session_id);
+
+    bool valid = false;
+
+    switch (ot)
+    {
+        // TODO hardcoded types, must advance SAI repository commit to get metadata for this
+        case SAI_OBJECT_TYPE_TWAMP_SESSION:
+
+            valid = true;
+            break;
+
+        default:
+
+            SWSS_LOG_ERROR("data.twamp_session_id %s has unexpected type: %s, expected TWAMP_SESSION",
+                    sai_serialize_object_id(data.twamp_session_id).c_str(),
+                    sai_serialize_object_type(ot).c_str());
+            break;
+    }
+
+    // check if all counter ids are in enum range
+    for (uint32_t idx = 0; idx < data.session_stats.number_of_counters; idx++)
+    {
+        if (!sai_metadata_get_enum_value_name(&sai_metadata_enum_sai_twamp_session_stat_t, data.session_stats.counters_ids[idx]))
+        {
+            SWSS_LOG_ERROR("value %d is not in range on sai_twamp_session_stat_t ", data.session_stats.counters_ids[idx]);
+
+            return;
+        }
+    }
+
+    if (valid && !m_oids.objectReferenceExists(data.twamp_session_id))
+    {
+        SWSS_LOG_NOTICE("data.twamp_session_id new object spotted %s not present in local DB (snoop!)",
+                sai_serialize_object_id(data.twamp_session_id).c_str());
+
+        sai_object_meta_key_t key = { .objecttype = (sai_object_type_t)ot, .objectkey = { .key = { .object_id = data.twamp_session_id } } };
+
+        m_oids.objectReferenceInsert(data.twamp_session_id);
+
+        if (!m_saiObjectCollection.objectExists(key))
+        {
+            m_saiObjectCollection.createObject(key);
+        }
+    }
+
+    if (!sai_metadata_get_enum_value_name(
+                &sai_metadata_enum_sai_twamp_session_state_t,
+                data.session_state))
+    {
+        SWSS_LOG_WARN("session_state value (%d) not found sai_twamp_session_state_t",
+                data.session_state);
+    }
+}
+
+void Meta::meta_sai_on_twamp_session_event(
+        _In_ uint32_t count,
+        _In_ const sai_twamp_session_event_notification_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    if (count && data == NULL)
+    {
+        SWSS_LOG_ERROR("sai_twamp_session_event_notification_data_t pointer is NULL but count is %u", count);
+        return;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        meta_sai_on_twamp_session_event_single(data[i]);
+    }
+}
+
+void Meta::meta_sai_on_tam_tel_type_config_change(_In_ sai_object_id_t m_tam_id)
+{
+    SWSS_LOG_ENTER();
+
+    if (m_tam_id == SAI_NULL_OBJECT_ID)
+    {
+        SWSS_LOG_ERROR("m_tam_id is NULL");
+        return;
+    }
+
+    auto ot = objectTypeQuery(m_tam_id);
+
+    if (ot != SAI_OBJECT_TYPE_TAM_TEL_TYPE)
+    {
+        SWSS_LOG_ERROR("m_tam_id %s has unexpected type: %s, expected TAM_TEL_TYPE",
+                sai_serialize_object_id(m_tam_id).c_str(),
+                sai_serialize_object_type(ot).c_str());
+        return;
+    }
+
+    if (!m_oids.objectReferenceExists(m_tam_id))
+    {
+        SWSS_LOG_NOTICE("m_tam_id %s is not present in local DB (snoop!)",
+                sai_serialize_object_id(m_tam_id).c_str());
+
+        sai_object_meta_key_t key = {.objecttype = (sai_object_type_t)ot, .objectkey = {.key = {.object_id = m_tam_id}}};
+
+        m_oids.objectReferenceInsert(m_tam_id);
+
+        if (!m_saiObjectCollection.objectExists(key))
+        {
+            m_saiObjectCollection.createObject(key);
+        }
     }
 }
 
@@ -6905,4 +7410,90 @@ void Meta::populate(
             m_attrKeys.insert(mKey, attrKey);
         }
     }
+}
+
+bool Meta::isPortObjectIdValid(
+        _In_ sai_object_type_t object_type)
+{
+    SWSS_LOG_ENTER();
+
+    auto members = sai_metadata_struct_members_sai_port_oper_status_notification_t;
+
+    for (size_t i = 0; members[i]; i++)
+    {
+        auto* mb = members[i];
+
+        if (mb->membername != std::string("port_id"))
+            continue;
+
+        for (size_t idx = 0; idx < mb->allowedobjecttypeslength; idx++)
+        {
+            if (mb->allowedobjecttypes[idx] == object_type)
+                return true;
+        }
+
+        return false;
+    }
+
+    SWSS_LOG_THROW("port_id member not found on sai_port_oper_status_notification");
+}
+
+std::vector<std::string> Meta::getValidPortObjectTypes()
+{
+    SWSS_LOG_ENTER();
+
+    auto md = sai_metadata_enum_sai_object_type_t;
+
+    std::vector<std::string> v;
+
+    for (size_t i = 0; i < md.valuescount; i++)
+    {
+        if (isPortObjectIdValid((sai_object_type_t)md.values[i]))
+            v.push_back(md.valuesshortnames[i]);
+    }
+
+    return v;
+}
+
+bool Meta::isIcmpEchoSessionObjectIdValid(
+        _In_ sai_object_type_t object_type)
+{
+    SWSS_LOG_ENTER();
+
+    auto members = sai_metadata_struct_members_sai_icmp_echo_session_state_notification_t;
+
+    for (size_t i = 0; members[i]; i++)
+    {
+        auto* mb = members[i];
+
+        if (mb->membername != std::string("icmp_echo_session_id"))
+            continue;
+
+        for (size_t idx = 0; idx < mb->allowedobjecttypeslength; idx++)
+        {
+            if (mb->allowedobjecttypes[idx] == object_type)
+                return true;
+        }
+
+        return false;
+    }
+
+    SWSS_LOG_THROW("member not found for sai_icmp_echo_session_state_notification_t");
+}
+
+std::vector<std::string> Meta::getValidIcmpEchoSessionObjectTypes()
+{
+    SWSS_LOG_ENTER();
+
+    auto md = sai_metadata_enum_sai_object_type_t;
+
+    std::vector<std::string> v;
+
+    for (size_t i = 0; i < md.valuescount; i++)
+    {
+        if (isIcmpEchoSessionObjectIdValid((sai_object_type_t)md.values[i]))
+            v.push_back(md.valuesshortnames[i]);
+    }
+
+    return v;
 }

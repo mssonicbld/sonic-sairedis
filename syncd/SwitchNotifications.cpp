@@ -1,6 +1,7 @@
 #include "SwitchNotifications.h"
 
 #include "swss/logger.h"
+#include <array>
 
 using namespace syncd;
 
@@ -88,6 +89,36 @@ void SwitchNotifications::SlotBase::onBfdSessionStateChange(
     return m_slots.at(context)->m_handler->onBfdSessionStateChange(count, data);
 }
 
+void SwitchNotifications::SlotBase::onIcmpEchoSessionStateChange(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_icmp_echo_session_state_notification_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onIcmpEchoSessionStateChange(count, data);
+}
+
+void SwitchNotifications::SlotBase::onHaSetEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_ha_set_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onHaSetEvent(count, data);
+}
+
+void SwitchNotifications::SlotBase::onHaScopeEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_ha_scope_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onHaScopeEvent(count, data);
+}
+
 void SwitchNotifications::SlotBase::onQueuePfcDeadlock(
         _In_ int context,
         _In_ uint32_t count,
@@ -96,6 +127,19 @@ void SwitchNotifications::SlotBase::onQueuePfcDeadlock(
     SWSS_LOG_ENTER();
 
     return m_slots[context]->m_handler->onQueuePfcDeadlock(count, data);
+}
+void SwitchNotifications::SlotBase::onSwitchAsicSdkHealthEvent(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_asic_sdk_health_severity_t severity,
+        _In_ sai_timespec_t timestamp,
+        _In_ sai_switch_asic_sdk_health_category_t category,
+        _In_ sai_switch_health_data_t data,
+        _In_ const sai_u8_list_t description)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onSwitchAsicSdkHealthEvent(switch_id, severity, timestamp, category, data, description);
 }
 
 void SwitchNotifications::SlotBase::onSwitchShutdownRequest(
@@ -115,6 +159,65 @@ void SwitchNotifications::SlotBase::onSwitchStateChange(
     SWSS_LOG_ENTER();
 
     return m_slots.at(context)->m_handler->onSwitchStateChange(switch_id, switch_oper_status);
+}
+
+void SwitchNotifications::SlotBase::onTwampSessionEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_twamp_session_event_notification_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onTwampSessionEvent(count, data);
+}
+
+void SwitchNotifications::SlotBase::onTamTelTypeConfigChange(
+        _In_ int context,
+        _In_ sai_object_id_t tam_tel_id)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onTamTelTypeConfigChange(tam_tel_id);
+}
+
+void SwitchNotifications::SlotBase::onMacsecPostStatus(
+        _In_ int context,
+        _In_ sai_object_id_t macsec_id,
+        _In_ sai_macsec_post_status_t post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onMacsecPostStatus(macsec_id, post_status);
+}
+
+void SwitchNotifications::SlotBase::onIpsecPostStatus(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_ipsec_post_status_t post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onIpsecPostStatus(switch_id, post_status);
+}
+
+void SwitchNotifications::SlotBase::onSwitchMacsecPostStatus(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_macsec_post_status_t post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onSwitchMacsecPostStatus(switch_id, post_status);
+}
+
+void SwitchNotifications::SlotBase::onSwitchIpsecPostStatus(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_ipsec_post_status_t post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onSwitchIpsecPostStatus(switch_id, post_status);
 }
 
 const sai_switch_notifications_t& SwitchNotifications::SlotBase::getSwitchNotifications() const

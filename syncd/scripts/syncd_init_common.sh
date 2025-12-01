@@ -11,6 +11,7 @@ ENABLE_SAITHRIFT=0
 TEMPLATES_DIR=/usr/share/sonic/templates
 PLATFORM_DIR=/usr/share/sonic/platform
 HWSKU_DIR=/usr/share/sonic/hwsku
+SAI_PROFILE_DIR=/etc/sai.d
 
 VARS_FILE=$TEMPLATES_DIR/swss_vars.j2
 
@@ -26,10 +27,8 @@ else
     CMD_ARGS=
 fi
 
-# Use temporary view between init and apply except when in fast-reboot
-if [[ "$(cat /proc/cmdline)" != *"SONIC_BOOT_TYPE=fast-reboot"* ]]; then
-    CMD_ARGS+=" -u"
-fi
+# Use temporary view between init view and apply view
+CMD_ARGS+=" -u"
 
 # Create a folder for SAI failure dump files
 mkdir -p /var/log/sai_failure_dump/
@@ -38,16 +37,30 @@ mkdir -p /var/log/sai_failure_dump/
 # currently disabled since most vendors don't support that yet
 # CMD_ARGS+=" -l"
 
-# Set synchronous mode if it is enabled in CONFIG_DB
+# Set zmq mode by default for smartswitch DPU
+# Otherwise, set synchronous mode if it is enabled in CONFIG_DB
 SYNC_MODE=$(echo $SYNCD_VARS | jq -r '.synchronous_mode')
-if [ "$SYNC_MODE" == "enable" ]; then
+SWITCH_TYPE=$(echo $SYNCD_VARS | jq -r '.switch_type')
+if [ "$SWITCH_TYPE" == "dpu" ]; then
+    CMD_ARGS+=" -z zmq_sync -x /usr/share/sonic/hwsku/context_config.json"
+elif [ "$SYNC_MODE" == "enable" ]; then
     CMD_ARGS+=" -s"
+fi
+
+SUPPORTING_BULK_COUNTER_GROUPS=$(echo $SYNCD_VARS | jq -r '.supporting_bulk_counter_groups')
+if [ "$SUPPORTING_BULK_COUNTER_GROUPS" != "" ]; then
+    CMD_ARGS+=" -B $SUPPORTING_BULK_COUNTER_GROUPS"
 fi
 
 case "$(cat /proc/cmdline)" in
   *SONIC_BOOT_TYPE=fastfast*)
     if [ -e /var/warmboot/warm-starting ]; then
         FASTFAST_REBOOT='yes'
+    fi
+    ;;
+  *SONIC_BOOT_TYPE=express*)
+    if [ -e /var/warmboot/warm-starting ]; then
+        EXPRESS_REBOOT='yes'
     fi
     ;;
   *SONIC_BOOT_TYPE=fast*|*fast-reboot*)
@@ -89,7 +102,14 @@ function set_start_type()
         CMD_ARGS+=" -t fast"
     elif [ x"$FASTFAST_REBOOT" == x"yes" ]; then
         CMD_ARGS+=" -t fastfast"
+    elif [ x"$EXPRESS_REBOOT" == x"yes" ]; then
+        CMD_ARGS+=" -t express"
     fi
+}
+
+config_syncd_pensando()
+{
+    CMD_ARGS+=" -l"
 }
 
 config_syncd_cisco_8000()
@@ -107,74 +127,188 @@ config_syncd_cisco_8000()
     fi
 }
 
+function merge_config_bcm_files()
+{
+    to_file=$1
+    from_file=$2
+    message=$3
+    override=false
+    echo "" >> $to_file
+    echo "# Start of $message" >> $to_file
+    while read line
+    do
+        line=$( echo $line | xargs )
+        if [ ! -z "$line" ];then
+            if [ "${line::1}" == '#' ];then
+                echo $line >> $to_file
+            elif [ "$line" == "[Low Inheritance Precedence]" ];then
+                override=false
+                echo "# $line" >> $to_file
+            elif [ "$line" == "[High Inheritance Precedence]" ];then
+                override=true
+                echo "# $line" >> $to_file
+                echo "Merge properties with override $override"
+            else
+                sedline=${line%=*}
+                if grep -q $sedline $to_file ;then
+                   if $override ;then
+                      echo "Override the config $(grep $sedline $to_file) with $line in $to_file"
+                      prop=${line:0:`expr index $line =`}
+                      sed -i "/$prop/d" $to_file
+                      echo $line >> $to_file
+                   else
+                      grepline=$(grep $sedline $to_file)
+                      if [ "${grepline::1}" == '#' ];then
+                         echo $line >> $to_file
+                      else
+                         echo "Keep the config $(grep $sedline $to_file) in $to_file"
+                      fi
+                   fi
+                else
+                   echo $line >> $to_file
+                fi
+            fi
+        fi
+    done < $from_file
+    echo "# End of $message" >> $to_file
+    echo "Merged $from_file to $to_file"
+}
+
+function merge_config_yml_files()
+{
+    to_file=$1
+    from_file=$2
+    message=$3
+    override=false
+    merged_cnt=0
+    echo "" >> $to_file
+    echo "# Start of $message" >> $to_file
+    while read line
+    do
+        line=$( echo $line | xargs )
+        if [ ! -z "$line" ];then
+            if [ "${line::1}" == '#' ];then
+                echo "        $line" >> $to_file
+            elif [ "$line" == "[Low Inheritance Precedence]" ];then
+                override=false
+                echo "        # $line" >> $to_file
+            elif [ "$line" == "[High Inheritance Precedence]" ];then
+                override=true
+                echo "        # $line" >> $to_file
+                echo "Merge properties with override $override"
+            else
+                sedline=${line%:*}
+                if grep -q $sedline $to_file ;then
+                   if $override ;then
+                      echo "Override the config $(grep $sedline $to_file) with $line in $to_file"
+                      prop=${line:0:`expr index "$line" :`}
+                      sed -i "/$prop/d" $to_file
+                      echo "        $line" >> $to_file
+                      merged_cnt+=1
+                   else
+                      grepline=$(grep $sedline $to_file)
+                      grepline="${grepline#"${grepline%%[![:space:]]*}"}"
+                      if [ "${grepline::1}" == '#' ];then
+                         echo "        $line" >> $to_file
+                         merged_cnt+=1
+                      else
+                         echo "Keep the config $(grep $sedline $to_file) in $to_file"
+                      fi
+                   fi
+                else
+                   echo "        $line" >> $to_file
+                   merged_cnt+=1
+                fi
+            fi
+        fi
+    done < $from_file
+
+    if [ $merged_cnt -gt 0 ]; then
+         sed -i "/# Start of/a \    global:" $to_file
+         sed -i "/# Start of/a \  0:" $to_file
+         sed -i "/# Start of/a \bcm_device:" $to_file
+         sed -i "/# Start of/a \---" $to_file
+    fi
+    echo "# End of $message" >> $to_file
+    if [ $merged_cnt -gt 0 ]; then
+       sed -i "/# End of/i \..." $to_file
+    fi
+    echo "Merged $from_file to $to_file"
+}
+
 config_syncd_bcm()
 {
+    PLATFORM_COMMON_DIR=/usr/share/sonic/device/x86_64-broadcom_common
+    PLT_CONFIG_BCM=""
+    PLT_CONFIG_YML=""
+    PLT_SAI_PROFILE=$(find $SAI_PROFILE_DIR -name 'sai.profile')
+    readline=$(grep SAI_INIT_CONFIG_FILE $PLT_SAI_PROFILE)
+    if [ ${readline: -3} == "bcm" ]; then
+       PLT_CONFIG_BCM=${readline#*=}
+    elif [ ${readline: -3} == "yml" ]; then
+       PLT_CONFIG_YML=${readline#*=}
+    fi
 
-    if [ -f $PLATFORM_DIR/common_config_support ];then
+    if [ ! -z "$PLT_CONFIG_BCM" ] && [ -f $PLATFORM_DIR/common_config_support ] ; then
+       cp -f $PLT_CONFIG_BCM /tmp
+       cp -f /etc/sai.d/sai.profile /tmp
+       CONFIG_BCM=$(find /tmp -name '*.bcm')
+       SAI_PROFILE=$(find /tmp -name 'sai.profile')
+       sed -i 's+/usr/share/sonic/hwsku+/tmp+g' $SAI_PROFILE
 
-      PLATFORM_COMMON_DIR=/usr/share/sonic/device/x86_64-broadcom_common
+       #Get first three characters of chip id
+       readline=$(grep '0x14e4' /proc/linux-kernel-bde)
+       chip_id=${readline#*0x14e4:0x}
+       chip_id=${chip_id::3}
+       COMMON_CONFIG_BCM=$(find $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id} -maxdepth 1 -name '*.bcm')
 
-      cp -f $HWSKU_DIR/*.config.bcm /tmp
-      cp -f /etc/sai.d/sai.profile /tmp
-      CONFIG_BCM=$(find /tmp -name '*.bcm')
-      PLT_CONFIG_BCM=$(find $HWSKU_DIR -name '*.bcm')
-      SAI_PROFILE=$(find /tmp -name 'sai.profile')
-      sed -i 's+/usr/share/sonic/hwsku+/tmp+g' $SAI_PROFILE
+       if [ -f $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id}/*.bcm ]; then
+          for file in $CONFIG_BCM; do
+             merge_config_bcm_files $file $COMMON_CONFIG_BCM "chip common properties"
+          done
+          echo "Merging $PLT_CONFIG_BCM with $COMMON_CONFIG_BCM, merge files stored in $CONFIG_BCM"
+       fi
+       #sync the file system
+       sync
 
-      #Get first three characters of chip id
-      readline=$(grep '0x14e4' /proc/linux-kernel-bde)
-      chip_id=${readline#*0x14e4:0x}
-      chip_id=${chip_id::3}
-      COMMON_CONFIG_BCM=$(find $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id} -name '*.bcm')
+       # copy the final config.bcm and sai.profile to the shared folder for 'show tech'
+       cp -f /tmp/sai.profile /var/run/sswsyncd/
+       cp -f /tmp/*.bcm /var/run/sswsyncd/
+    fi
 
-      if [ -f $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id}/*.bcm ]; then
-         for file in $CONFIG_BCM; do
-             echo "" >> $file
-             echo "# Start of chip common properties" >> $file
-             while read line
-             do
-               line=$( echo $line | xargs )
-               if [ ! -z "$line" ];then
-                   if [ "${line::1}" == '#' ];then
-                       echo $line >> $file
-                   else
-                       sedline=${line%=*}
-                       if grep -q $sedline $file ;then
-                          echo "Keep the config $(grep $sedline $file) in $file"
-                       else
-                          echo $line >> $file
-                       fi
-                   fi
-               fi
-             done < $COMMON_CONFIG_BCM
-             echo "# End of chip common properties" >> $file
-         done
-         echo "Merging $PLT_CONFIG_BCM with $COMMON_CONFIG_BCM, merge files stored in $CONFIG_BCM"
-      fi
+    if [ ! -z "$PLT_CONFIG_YML" ] && [ -f $PLATFORM_DIR/common_config_support ]; then
+       cp -f $PLT_CONFIG_YML /tmp
+       cp -f /etc/sai.d/sai.profile /tmp
+       CONFIG_YML=$(find /tmp -name '*.yml')
+       SAI_PROFILE=$(find /tmp -name 'sai.profile')
+       sed -i 's+/usr/share/sonic/hwsku+/tmp+g' $SAI_PROFILE
 
-      #sync the file system
-      sync
+       #Get first three characters of chip id
+       readline=$(grep '0:14e4' /proc/linux_ngbde)
+       chip_id=${readline#*0:14e4:}
+       chip_id=${chip_id::3}
+       COMMON_CONFIG_BCM=$(find $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id} -maxdepth 1 -name '*.bcm')
 
-      # copy the final config.bcm and sai.profile to the shared folder for 'show tech'
-      cp -f /tmp/sai.profile /var/run/sswsyncd/
-      cp -f /tmp/*.bcm /var/run/sswsyncd/
+       if [ -f $PLATFORM_COMMON_DIR/x86_64-broadcom_${chip_id}/*.bcm ]; then
+          for file in $CONFIG_YML; do
+             merge_config_yml_files $file $COMMON_CONFIG_BCM "chip common properties"
+          done
+          echo "Merging $PLT_CONFIG_YML with $COMMON_CONFIG_BCM, merge files stored in $CONFIG_YML "
+       fi
+       #sync the file system
+       sync
 
-      if [ -f "/tmp/sai.profile" ]; then
-          CMD_ARGS+=" -p /tmp/sai.profile"
-      elif [ -f "/etc/sai.d/sai.profile" ]; then
-          CMD_ARGS+=" -p /etc/sai.d/sai.profile"
-      else
-          CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
-      fi
+       # copy the final config.bcm and sai.profile to the shared folder for 'show tech'
+       cp -f /tmp/sai.profile /var/run/sswsyncd/
+       cp -f /tmp/*.yml /var/run/sswsyncd/
+    fi
 
+    if [ -f "/tmp/sai.profile" ]; then
+        CMD_ARGS+=" -p /tmp/sai.profile"
+	elif [ -f "/etc/sai.d/sai.profile" ]; then
+        CMD_ARGS+=" -p /etc/sai.d/sai.profile"
     else
-
-      if [ -f "/etc/sai.d/sai.profile" ]; then
-          CMD_ARGS+=" -p /etc/sai.d/sai.profile"
-      else
-          CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
-      fi
-
+        CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
     fi
 
     if [ -f "$HWSKU_DIR/context_config.json" ]; then
@@ -204,13 +338,36 @@ config_syncd_mlnx()
     DUAL_TOR="$(echo $SYNCD_VARS | jq -r '.dual_tor')"
     DSCP_REMAPPING="$(echo $SYNCD_VARS | jq -r '.dscp_remapping')"
 
-    # Make default sai.profile
+    SAI_COMMON_FILE_PATH=/etc/mlnx/sai-common.profile
+
     if [[ -f $HWSKU_DIR/sai.profile.j2 ]]; then
         export RESOURCE_TYPE="$(echo $SYNCD_VARS | jq -r '.resource_type')"
-        j2 -e RESOURCE_TYPE $HWSKU_DIR/sai.profile.j2 -o /tmp/sai.profile
+        j2 -e RESOURCE_TYPE $HWSKU_DIR/sai.profile.j2 -o /tmp/sai-temp.profile
     else
-        cat $HWSKU_DIR/sai.profile > /tmp/sai.profile
+        cat $HWSKU_DIR/sai.profile > /tmp/sai-temp.profile
     fi
+
+    echo >> /tmp/sai-temp.profile
+
+    DEVICE_TYPE=$(/usr/bin/asic_detect/asic_detect.sh)
+    if [[ $? -eq 0 ]]; then
+        ASIC_PROFILE_FILE="sai-${DEVICE_TYPE}.profile"
+        ASIC_PROFILE_PATH="/etc/mlnx/${ASIC_PROFILE_FILE}"
+        if [ -f "$ASIC_PROFILE_PATH" ]; then
+            cat "$ASIC_PROFILE_PATH" >> /tmp/sai-temp.profile
+            echo >> /tmp/sai-temp.profile
+        fi
+    else
+        echo "Warning: ASIC is not detected..."
+    fi
+
+    if [[ -f $SAI_COMMON_FILE_PATH ]]; then
+        cat $SAI_COMMON_FILE_PATH >> /tmp/sai-temp.profile
+    fi
+
+    # keep only the first occurence of each prefix with '=' sign, and remove the others.
+    awk -F= '!seen[$1]++' /tmp/sai-temp.profile > /tmp/sai.profile
+    rm -f /tmp/sai-temp.profile
 
     # Update sai.profile with MAC_ADDRESS and WARM_BOOT settings
     echo "DEVICE_MAC_ADDRESS=$MAC_ADDRESS" >> /tmp/sai.profile
@@ -222,6 +379,7 @@ config_syncd_mlnx()
 
     if [[ "$DUAL_TOR" == "enable" ]]; then
        echo "SAI_ADDITIONAL_MAC_ENABLED=1" >> /tmp/sai.profile
+       echo "SAI_ACL_MULTI_BINDING_ENABLED=1" >> /tmp/sai.profile
     fi
 
     SDK_DUMP_PATH=`cat /tmp/sai.profile|grep "SAI_DUMP_STORE_PATH"|cut -d = -f2`
@@ -234,10 +392,8 @@ config_syncd_mlnx()
         cat /tmp/sai_extra.profile >> /tmp/sai.profile
     fi
 
-    if [[ -f /$HWSKU_DIR/module_control_support.profile ]]; then
-        cat /$HWSKU_DIR/module_control_support.profile >> /tmp/sai.profile
-    fi
-
+    # Ensure no redundant newlines
+    sed -i '/^$/d' /tmp/sai.profile
 }
 
 config_syncd_centec()
@@ -260,9 +416,11 @@ config_syncd_cavium()
     done
 }
 
-config_syncd_marvell()
+config_syncd_marvell_prestera()
 {
     CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
+
+    export MRVL_PSAI_SONIC=1
 
     [ -e /dev/net/tun ] || ( mkdir -p /dev/net && mknod /dev/net/tun c 10 200 )
 }
@@ -311,7 +469,32 @@ config_syncd_nephos()
 
 config_syncd_vs()
 {
+    if [[ $(sonic-db-cli CONFIG_DB hget 'DEVICE_METADATA|localhost' switch_type) == 'dpu' ]]; then
+        if [[ -f /usr/bin/syncd_dash ]]; then
+            CMD_SYNCD=/usr/bin/syncd_dash
+            CMD=$CMD_SYNCD
+        fi
+    fi
+
     CMD_ARGS+=" -l -p $HWSKU_DIR/sai.profile"
+}
+
+vpp_api_check()
+{
+   VPP_API_SOCK=$1
+   while true
+   do
+      [ -S "$VPP_API_SOCK" ] && vpp_api_test socket-name $VPP_API_SOCK <<< "show_version" 2>/dev/null | grep "version:" && break
+      sleep 1
+   done
+}
+
+config_syncd_vpp()
+{
+    CMD_ARGS+=" -p $HWSKU_DIR/sai_vpp.profile"
+    vpp_api_check "/run/vpp/api.sock"
+    source /etc/sonic/vpp/syncd_vpp_env
+    export NO_LINUX_NL
 }
 
 config_syncd_soda()
@@ -320,11 +503,11 @@ config_syncd_soda()
     CMD_ARGS+=" -l -p $HWSKU_DIR/sai.profile"
 }
 
-config_syncd_innovium()
+config_syncd_marvell_teralynx()
 {
     CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
     ulimit -s 65536
-    export II_ROOT="/var/log/invm"
+    export II_ROOT="/var/log/mrvl_teralynx"
     export II_APPEND_LOG=1
     mkdir -p $II_ROOT
 }
@@ -333,33 +516,47 @@ config_syncd_nvidia_bluefield()
 {
     # Read MAC addresses
     base_mac="$(echo $SYNCD_VARS | jq -r '.mac')"
-    eth0_mac=$(cat /sys/class/net/Ethernet0/address)
-    eth4_mac=$(cat /sys/class/net/Ethernet4/address)
+    hwsku=$(sonic-cfggen -d -v 'DEVICE_METADATA["localhost"]["hwsku"]')
+    single_port=$([[ $hwsku == *"-com-dpu" ]] && echo true || echo false)
 
-    cp $HWSKU_DIR/sai.profile /tmp/sai.profile
+    eth0_mac=$(cat /sys/class/net/Ethernet0/address)
+
+    cp $HWSKU_DIR/sai.profile /tmp/sai-temp.profile
+
+    echo >> /tmp/sai-temp.profile
+
+    DEVICE_TYPE=$(/usr/bin/asic_detect/asic_detect.sh)
+    if [[ $? -eq 0 ]]; then
+        ASIC_PROFILE_FILE="sai-${DEVICE_TYPE}.profile"
+        ASIC_PROFILE_PATH="/etc/mlnx/${ASIC_PROFILE_FILE}"
+        if [ -f "$ASIC_PROFILE_PATH" ]; then
+            cat "$ASIC_PROFILE_PATH" >> /tmp/sai-temp.profile
+            echo >> /tmp/sai-temp.profile
+        fi
+    else
+        echo "Warning: ASIC is not detected..."
+    fi
+
+    # keep only the first occurence of each prefix with '=' sign, and remove the others.
+    awk -F= '!seen[$1]++' /tmp/sai-temp.profile > /tmp/sai.profile
+    rm -f /tmp/sai-temp.profile
 
     # Update sai.profile with MAC_ADDRESS
     echo "DEVICE_MAC_ADDRESS=$base_mac" >> /tmp/sai.profile
     echo "PORT_1_MAC_ADDRESS=$eth0_mac" >> /tmp/sai.profile
-    echo "PORT_2_MAC_ADDRESS=$eth4_mac" >> /tmp/sai.profile
 
     CMD_ARGS+=" -l -p /tmp/sai.profile -w 180000000"
 
-    echo 4096 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+    SDK_DUMP_PATH=$(cat /tmp/sai.profile | grep "SAI_DUMP_STORE_PATH" | cut -d = -f2)
+    if [ ! -d "$SDK_DUMP_PATH" ]; then
+        mkdir -p "$SDK_DUMP_PATH"
+    fi
+
+    echo 11700 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
     mkdir -p /mnt/huge
     mount -t hugetlbfs pagesize=1GB /mnt/huge
 
-    devlink dev eswitch set pci/0000:03:00.0 mode legacy
-    devlink dev eswitch set pci/0000:03:00.1 mode legacy
-    devlink dev eswitch set pci/0000:03:00.0 mode switchdev
-    devlink dev eswitch set pci/0000:03:00.1 mode switchdev
-    devlink dev param set pci/0000:03:00.0 name esw_multiport value 1 cmode runtime
-    devlink dev param set pci/0000:03:00.1 name esw_multiport value 1 cmode runtime
-
     ethtool -A Ethernet0 rx off tx off
-    ethtool -A Ethernet4 rx off tx off
-
-    mlnx-sf --device 0000:03:00.0 --action create --sfnum 1 --hwaddr ${base_mac} -t
 }
 
 config_syncd_xsight()
@@ -369,18 +566,7 @@ config_syncd_xsight()
     LABEL_REVISION_FILE="/etc/sonic/hw_revision"
     ONIE_MACHINE=`sed -n -e 's/^.*onie_machine=//p' /etc/machine.conf`
 
-    ln -sf /usr/share/sonic/hwsku/xdrv_config.json /etc/xsight/xdrv_config.json
-    ln -sf /usr/share/sonic/hwsku/xlink_cfg.json /etc/xsight/xlink_cfg.json
-    ln -sf /usr/share/sonic/hwsku/lanes_polarity.json /etc/xsight/lanes_polarity.json
-
-    if [ -f  ${LABEL_REVISION_FILE} ]; then
-        LABEL_REVISION=`cat ${LABEL_REVISION_FILE}`
-        if [[ x${LABEL_REVISION} == x"R0B" ]] || [[ x${LABEL_REVISION} == x"R0B2" ]]; then
-            ln -sf /etc/xsight/serdes_config_A0.json /etc/xsight/serdes_config.json
-        else
-            ln -sf /etc/xsight/serdes_config_A1.json /etc/xsight/serdes_config.json
-        fi
-    fi
+    /usr/bin/init_xsai.sh
 
     #export XLOG_DEBUG="XSW SAI SAI-HOST XHAL-TBL XHAL-LKP XHAL-LPM XHAL-TCAM XHAL-DTE XHAL-RNG XHAL-SP XHAL-RPC"
     export XLOG_SYSLOG=ALL
@@ -411,6 +597,11 @@ config_syncd_xsight()
     CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
 }
 
+config_syncd_clounix()
+{
+    CMD_ARGS+=" -p $HWSKU_DIR/sai.profile"
+}
+
 config_syncd()
 {
     check_warm_boot
@@ -426,22 +617,28 @@ config_syncd()
         config_syncd_cavium
     elif [ "$SONIC_ASIC_TYPE" == "centec" ]; then
         config_syncd_centec
-    elif [ "$SONIC_ASIC_TYPE" == "marvell" ]; then
-        config_syncd_marvell
+    elif [ "$SONIC_ASIC_TYPE" == "marvell-prestera" ]; then
+        config_syncd_marvell_prestera
      elif [ "$SONIC_ASIC_TYPE" == "barefoot" ]; then
          config_syncd_barefoot
     elif [ "$SONIC_ASIC_TYPE" == "nephos" ]; then
         config_syncd_nephos
     elif [ "$SONIC_ASIC_TYPE" == "vs" ]; then
         config_syncd_vs
-    elif [ "$SONIC_ASIC_TYPE" == "innovium" ]; then
-        config_syncd_innovium
+    elif [ "$SONIC_ASIC_TYPE" == "vpp" ]; then
+        config_syncd_vpp
+    elif [ "$SONIC_ASIC_TYPE" == "marvell-teralynx" ]; then
+        config_syncd_marvell_teralynx
     elif [ "$SONIC_ASIC_TYPE" == "soda" ]; then
         config_syncd_soda
     elif [ "$SONIC_ASIC_TYPE" == "nvidia-bluefield" ]; then
         config_syncd_nvidia_bluefield
     elif [ "$SONIC_ASIC_TYPE" == "xsight" ]; then
         config_syncd_xsight
+    elif [ "$SONIC_ASIC_TYPE" == "pensando" ]; then
+	config_syncd_pensando
+    elif [ "$SONIC_ASIC_TYPE" == "clounix" ]; then
+        config_syncd_clounix
     else
         echo "Unknown ASIC type $SONIC_ASIC_TYPE"
         exit 1
@@ -455,4 +652,3 @@ config_syncd()
 
     [ -r $PLATFORM_DIR/syncd.conf ] && . $PLATFORM_DIR/syncd.conf
 }
-

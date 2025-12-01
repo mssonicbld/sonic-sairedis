@@ -53,8 +53,17 @@ VendorSai::VendorSai()
         .query_attribute_enum_values_capability = &sai_query_attribute_enum_values_capability,
         .query_object_stage = nullptr,
         .query_stats_capability = &sai_query_stats_capability,
+#ifdef HAVE_SAI_QUERY_STATS_ST_CAPABILITY
+        .query_stats_st_capability = &sai_query_stats_st_capability,
+#else
+        .query_stats_st_capability = nullptr,
+#endif
         .switch_id_query = &sai_switch_id_query,
+#ifdef HAVE_SAI_TAM_TELEMETRY_GET_DATA
+        .tam_telemetry_get_data = &sai_tam_telemetry_get_data,
+#else
         .tam_telemetry_get_data = nullptr,
+#endif
     };
 
     m_globalApis = ga;
@@ -66,13 +75,13 @@ VendorSai::~VendorSai()
 
     if (m_apiInitialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
 // INITIALIZE UNINITIALIZE
 
-sai_status_t VendorSai::initialize(
+sai_status_t VendorSai::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -91,6 +100,23 @@ sai_status_t VendorSai::initialize(
         SWSS_LOG_ERROR("invalid service_method_table handle passed to SAI API initialize");
 
         return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    memcpy(&m_service_method_table, service_method_table, sizeof(m_service_method_table));
+
+    auto status = m_globalApis.api_initialize(flags, service_method_table);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        memset(&m_apis, 0, sizeof(m_apis));
+
+        int failed = sai_metadata_apis_query(m_globalApis.api_query, &m_apis);
+
+        if (failed > 0)
+        {
+            SWSS_LOG_NOTICE("sai_api_query failed for %d apis", failed);
+        }
+
     }
 
     sai_api_version_t version{};
@@ -120,28 +146,12 @@ sai_status_t VendorSai::initialize(
         return SAI_STATUS_FAILURE;
     }
 
-    memcpy(&m_service_method_table, service_method_table, sizeof(m_service_method_table));
-
-    auto status = m_globalApis.api_initialize(flags, service_method_table);
-
-    if (status == SAI_STATUS_SUCCESS)
-    {
-        memset(&m_apis, 0, sizeof(m_apis));
-
-        int failed = sai_metadata_apis_query(m_globalApis.api_query, &m_apis);
-
-        if (failed > 0)
-        {
-            SWSS_LOG_NOTICE("sai_api_query failed for %d apis", failed);
-        }
-
-        m_apiInitialized = true;
-    }
+    m_apiInitialized = true;
 
     return status;
 }
 
-sai_status_t VendorSai::uninitialize(void)
+sai_status_t VendorSai::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
     VENDOR_CHECK_API_INITIALIZED();
@@ -342,6 +352,23 @@ sai_status_t VendorSai::queryStatsCapability(
             stats_capability);
 }
 
+sai_status_t VendorSai::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return (m_globalApis.query_stats_st_capability == nullptr)
+        ? SAI_STATUS_NOT_IMPLEMENTED
+        : m_globalApis.query_stats_st_capability(
+                switchId,
+                objectType,
+                stats_capability);
+}
+
 sai_status_t VendorSai::getStatsExt(
         _In_ sai_object_type_t object_type,
         _In_ sai_object_id_t object_id,
@@ -469,6 +496,10 @@ sai_status_t VendorSai::bulkCreate(
             ptr = m_apis.next_hop_group_api->create_next_hop_group_members;
             break;
 
+        case SAI_OBJECT_TYPE_NEXT_HOP:
+            ptr = m_apis.next_hop_api->create_next_hops;
+            break;
+
         case SAI_OBJECT_TYPE_SRV6_SIDLIST:
             ptr = m_apis.srv6_api->create_srv6_sidlists;
             break;
@@ -495,6 +526,26 @@ sai_status_t VendorSai::bulkCreate(
 
         case SAI_OBJECT_TYPE_DASH_ACL_RULE:
             ptr = m_apis.dash_acl_api->create_dash_acl_rules;
+            break;
+
+        case SAI_OBJECT_TYPE_METER_RULE:
+            ptr = m_apis.dash_meter_api->create_meter_rules;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL:
+            ptr = m_apis.dash_tunnel_api->create_dash_tunnels;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL_MEMBER:
+            ptr = m_apis.dash_tunnel_api->create_dash_tunnel_members;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL_NEXT_HOP:
+            ptr = m_apis.dash_tunnel_api->create_dash_tunnel_next_hops;
+            break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP:
+            ptr = m_apis.dash_outbound_port_map_api->create_outbound_port_maps;
             break;
 
         default:
@@ -548,6 +599,10 @@ sai_status_t VendorSai::bulkRemove(
             ptr = m_apis.next_hop_group_api->remove_next_hop_group_members;
             break;
 
+        case SAI_OBJECT_TYPE_NEXT_HOP:
+            ptr = m_apis.next_hop_api->remove_next_hops;
+            break;
+
         case SAI_OBJECT_TYPE_SRV6_SIDLIST:
             ptr = m_apis.srv6_api->remove_srv6_sidlists;
             break;
@@ -576,6 +631,26 @@ sai_status_t VendorSai::bulkRemove(
             ptr = m_apis.dash_acl_api->remove_dash_acl_rules;
             break;
 
+        case SAI_OBJECT_TYPE_METER_RULE:
+            ptr = m_apis.dash_meter_api->remove_meter_rules;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL:
+            ptr = m_apis.dash_tunnel_api->remove_dash_tunnels;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL_MEMBER:
+            ptr = m_apis.dash_tunnel_api->remove_dash_tunnel_members;
+            break;
+
+        case SAI_OBJECT_TYPE_DASH_TUNNEL_NEXT_HOP:
+            ptr = m_apis.dash_tunnel_api->remove_dash_tunnel_next_hops;
+            break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP:
+            ptr = m_apis.dash_outbound_port_map_api->remove_outbound_port_maps;
+            break;
+
         default:
             SWSS_LOG_ERROR("not implemented %s, FIXME", sai_serialize_object_type(object_type).c_str());
             return SAI_STATUS_NOT_IMPLEMENTED;
@@ -602,10 +677,100 @@ sai_status_t VendorSai::bulkSet(
     SWSS_LOG_ENTER();
     VENDOR_CHECK_API_INITIALIZED();
 
-    SWSS_LOG_ERROR("not supported by SAI");
+    sai_bulk_object_set_attribute_fn ptr;
 
-    return SAI_STATUS_NOT_SUPPORTED;
+    switch (object_type)
+    {
+        case SAI_OBJECT_TYPE_PORT:
+            ptr = m_apis.port_api->set_ports_attribute;
+            break;
+
+        case SAI_OBJECT_TYPE_INGRESS_PRIORITY_GROUP:
+            ptr = m_apis.buffer_api->set_ingress_priority_groups_attribute;
+            break;
+
+        case SAI_OBJECT_TYPE_QUEUE:
+            ptr = m_apis.queue_api->set_queues_attribute;
+            break;
+
+        default:
+            SWSS_LOG_ERROR("not implemented %s, FIXME", sai_serialize_object_type(object_type).c_str());
+            return SAI_STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (!ptr)
+    {
+        SWSS_LOG_INFO("create bulk not supported from SAI, object_type = %s",  sai_serialize_object_type(object_type).c_str());
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return ptr(object_count,
+            object_id,
+            attr_list,
+            mode,
+            object_statuses);
 }
+
+sai_status_t VendorSai::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    sai_bulk_object_get_attribute_fn ptr;
+
+    switch (object_type)
+    {
+        case SAI_OBJECT_TYPE_PORT:
+            ptr = m_apis.port_api->get_ports_attribute;
+            break;
+
+        default:
+            SWSS_LOG_ERROR("not implemented %s, FIXME", sai_serialize_object_type(object_type).c_str());
+            return SAI_STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (!ptr)
+    {
+        SWSS_LOG_INFO("get bulk not supported in SAI, object_type = %s",  sai_serialize_object_type(object_type).c_str());
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return ptr(object_count,
+            object_id,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t VendorSai::bulkGet(                            \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    MUTEX();                                                \
+    SWSS_LOG_ENTER();                                       \
+    VENDOR_CHECK_API_INITIALIZED();                         \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
+
 
 // BULK QUAD ENTRY
 
@@ -960,6 +1125,168 @@ sai_status_t VendorSai::bulkCreate(
             object_statuses);
 }
 
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_flow_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_flow_api->create_flow_entries)
+    {
+        SWSS_LOG_INFO("create_flow_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_flow_api->create_flow_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_meter_bucket_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_meter_api->create_meter_bucket_entries)
+    {
+        SWSS_LOG_INFO("create_meter_bucket_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_meter_api->create_meter_bucket_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_prefix_compression_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.prefix_compression_api->create_prefix_compression_entries)
+    {
+        SWSS_LOG_INFO("create_prefix_compression_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.prefix_compression_api->create_prefix_compression_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_outbound_port_map_port_range_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_outbound_port_map_api->create_outbound_port_map_port_range_entries)
+    {
+        SWSS_LOG_INFO("create_outbound_port_map_port_range_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_outbound_port_map_api->create_outbound_port_map_port_range_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_global_trusted_vni_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_trusted_vni_api->create_global_trusted_vni_entries)
+    {
+        SWSS_LOG_INFO("create_global_trusted_vni_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_trusted_vni_api->create_global_trusted_vni_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkCreate(
+        _In_ uint32_t object_count,
+        _In_ const sai_eni_trusted_vni_entry_t* entries,
+        _In_ const uint32_t *attr_count,
+        _In_ const sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_trusted_vni_api->create_eni_trusted_vni_entries)
+    {
+        SWSS_LOG_INFO("create_eni_trusted_vni_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_trusted_vni_api->create_eni_trusted_vni_entries(
+            object_count,
+            entries,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
 // BULK REMOVE
 
 sai_status_t VendorSai::bulkRemove(
@@ -1262,6 +1589,144 @@ sai_status_t VendorSai::bulkRemove(
             object_statuses);
 }
 
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_flow_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_flow_api->remove_flow_entries)
+    {
+        SWSS_LOG_INFO("remove_flow_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_flow_api->remove_flow_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_meter_bucket_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_meter_api->remove_meter_bucket_entries)
+    {
+        SWSS_LOG_INFO("remove_meter_bucket_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_meter_api->remove_meter_bucket_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_prefix_compression_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.prefix_compression_api->remove_prefix_compression_entries)
+    {
+        SWSS_LOG_INFO("remove_prefix_compression_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.prefix_compression_api->remove_prefix_compression_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_outbound_port_map_port_range_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_outbound_port_map_api->remove_outbound_port_map_port_range_entries)
+    {
+        SWSS_LOG_INFO("remove_outbound_port_map_port_range_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_outbound_port_map_api->remove_outbound_port_map_port_range_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_global_trusted_vni_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_trusted_vni_api->remove_global_trusted_vni_entries)
+    {
+        SWSS_LOG_INFO("remove_global_trusted_vni_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_trusted_vni_api->remove_global_trusted_vni_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
+sai_status_t VendorSai::bulkRemove(
+        _In_ uint32_t object_count,
+        _In_ const sai_eni_trusted_vni_entry_t *entries,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    if (!m_apis.dash_trusted_vni_api->remove_eni_trusted_vni_entries)
+    {
+        SWSS_LOG_INFO("remove_eni_trusted_vni_entries is not supported");
+        return SAI_STATUS_NOT_SUPPORTED;
+    }
+
+    return m_apis.dash_trusted_vni_api->remove_eni_trusted_vni_entries(
+            object_count,
+            entries,
+            mode,
+            object_statuses);
+}
+
 // BULK SET
 
 sai_status_t VendorSai::bulkSet(
@@ -1512,6 +1977,90 @@ sai_status_t VendorSai::bulkSet(
     return SAI_STATUS_NOT_SUPPORTED;
 }
 
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_flow_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_meter_bucket_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_prefix_compression_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_outbound_port_map_port_range_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_global_trusted_vni_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
+sai_status_t VendorSai::bulkSet(
+        _In_ uint32_t object_count,
+        _In_ const sai_eni_trusted_vni_entry_t *entries,
+        _In_ const sai_attribute_t *attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    VENDOR_CHECK_API_INITIALIZED();
+
+    return SAI_STATUS_NOT_SUPPORTED;
+}
+
 // NON QUAD API
 
 sai_status_t VendorSai::flushFdbEntries(
@@ -1628,7 +2177,7 @@ sai_status_t VendorSai::queryAttributeCapability(
             capability);
 }
 
-sai_status_t VendorSai::queryAattributeEnumValuesCapability(
+sai_status_t VendorSai::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t objectType,
         _In_ sai_attr_id_t attrId,
@@ -1679,16 +2228,35 @@ sai_status_t VendorSai::logSet(
         _In_ sai_api_t api,
         _In_ sai_log_level_t log_level)
 {
+    MUTEX();
     SWSS_LOG_ENTER();
 
     m_logLevelMap[api] = log_level;
 
+    void *api_method_table = nullptr;
+
+    sai_status_t status = m_globalApis.api_query(api, &api_method_table);
+
+    if (status != SAI_STATUS_SUCCESS)
+    {
+        return status;
+    }
+
     return m_globalApis.log_set(api, log_level);
+}
+
+sai_status_t VendorSai::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    SWSS_LOG_ENTER();
+
+    return m_globalApis.query_api_version(version);
 }
 
 sai_log_level_t VendorSai::logGet(
         _In_ sai_api_t api)
 {
+    MUTEX();
     SWSS_LOG_ENTER();
 
     auto it = m_logLevelMap.find(api);

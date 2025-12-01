@@ -43,13 +43,13 @@ Sai::~Sai()
 
     if (m_apiInitialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
 // INITIALIZE UNINITIALIZE
 
-sai_status_t Sai::initialize(
+sai_status_t Sai::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -99,7 +99,7 @@ sai_status_t Sai::initialize(
     return SAI_STATUS_SUCCESS;
 }
 
-sai_status_t Sai::uninitialize(void)
+sai_status_t Sai::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
@@ -224,13 +224,19 @@ sai_status_t Sai::set(
 
         // skip metadata if attribute is redis extension attribute
 
-        // TODO this is setting on all contexts, but maybe we want one specific?
-        // and do set on all if objectId == NULL
-
         bool success = true;
 
+        // Setting on all contexts if objectType != SAI_OBJECT_TYPE_SWITCH or objectId == NULL
         for (auto& kvp: m_contextMap)
         {
+            if (objectType == SAI_OBJECT_TYPE_SWITCH && objectId != SAI_NULL_OBJECT_ID)
+            {
+                if (!kvp.second->m_redisSai->containsSwitch(objectId))
+                {
+                    continue;
+                }
+            }
+
             sai_status_t status = kvp.second->m_redisSai->set(objectType, objectId, attr);
 
             success &= (status == SAI_STATUS_SUCCESS);
@@ -356,9 +362,31 @@ sai_status_t Sai::queryStatsCapability(
         _In_ sai_object_type_t objectType,
         _Inout_ sai_stat_capability_list_t *stats_capability)
 {
+    MUTEX();
     SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+    REDIS_CHECK_CONTEXT(switchId);
 
-    return SAI_STATUS_NOT_IMPLEMENTED;
+    return context->m_meta->queryStatsCapability(
+            switchId,
+            objectType,
+            stats_capability);
+}
+
+sai_status_t Sai::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+    REDIS_CHECK_CONTEXT(switchId);
+
+    return context->m_meta->queryStatsStCapability(
+        switchId,
+        objectType,
+        stats_capability);
 }
 
 sai_status_t Sai::getStatsExt(
@@ -503,6 +531,30 @@ sai_status_t Sai::bulkSet(
             object_statuses);
 }
 
+sai_status_t Sai::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+    REDIS_CHECK_CONTEXT(*object_id);
+
+    return context->m_meta->bulkGet(
+            object_type,
+            object_count,
+            object_id,
+            attr_count,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
 // BULK QUAD ENTRY
 
 #define DECLARE_BULK_CREATE_ENTRY(OT,ot)                    \
@@ -578,6 +630,30 @@ sai_status_t Sai::bulkSet(                                  \
 
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
 
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t Sai::bulkGet(                                  \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    MUTEX();                                                \
+    SWSS_LOG_ENTER();                                       \
+    REDIS_CHECK_API_INITIALIZED();                          \
+    REDIS_CHECK_POINTER(ot);                                \
+    REDIS_CHECK_POINTER(attr_count);                        \
+    REDIS_CHECK_POINTER(attr_list);                         \
+    REDIS_CHECK_POINTER(object_statuses);                   \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
+
 // NON QUAD API
 
 sai_status_t Sai::flushFdbEntries(
@@ -636,7 +712,7 @@ sai_status_t Sai::queryAttributeCapability(
             capability);
 }
 
-sai_status_t Sai::queryAattributeEnumValuesCapability(
+sai_status_t Sai::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switch_id,
         _In_ sai_object_type_t object_type,
         _In_ sai_attr_id_t attr_id,
@@ -647,7 +723,7 @@ sai_status_t Sai::queryAattributeEnumValuesCapability(
     REDIS_CHECK_API_INITIALIZED();
     REDIS_CHECK_CONTEXT(switch_id);
 
-    return context->m_meta->queryAattributeEnumValuesCapability(
+    return context->m_meta->queryAttributeEnumValuesCapability(
             switch_id,
             object_type,
             attr_id,
@@ -698,6 +774,31 @@ sai_status_t Sai::logSet(
     }
 
     return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t Sai::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    // TODO we should use specific context, but we don't know which one since
+    // there is no object ID parameter, we can use default context or cast
+    // version as context id same as passed in SAI_REDIS_SWITCH_ATTR_CONTEXT
+    // currently we will return just first context on context map, since
+    // user maybe not aware of trick with casting context
+
+    for (auto&kvp: m_contextMap)
+    {
+        SWSS_LOG_WARN("using first context");
+
+        return kvp.second->m_meta->queryApiVersion(version);
+    }
+
+    SWSS_LOG_ERROR("context map is empty");
+
+    return SAI_STATUS_FAILURE;
 }
 
 /*

@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/algorithm/string/join.hpp>
+
 #include <memory>
 
 #define VLAN_ID 2
@@ -450,14 +452,14 @@ TEST(Meta, initialize)
 {
     Meta m(std::make_shared<DummySaiInterface>());
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.initialize(0, 0));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.apiInitialize(0, 0));
 }
 
 TEST(Meta, uninitialize)
 {
     Meta m(std::make_shared<DummySaiInterface>());
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.uninitialize());
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.apiUninitialize());
 }
 
 TEST(Meta, quad_mcast_fdb_entry)
@@ -898,7 +900,7 @@ TEST(Meta, queryAttributeCapability)
     EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeCapability(switchId, SAI_OBJECT_TYPE_ACL_ENTRY, 100000, &cap));
 }
 
-TEST(Meta, queryAattributeEnumValuesCapability)
+TEST(Meta, queryAttributeEnumValuesCapability)
 {
     Meta m(std::make_shared<MetaTestSaiInterface>());
 
@@ -921,21 +923,80 @@ TEST(Meta, queryAattributeEnumValuesCapability)
     vals[0] = 0;
     vals[1] = 100000;
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
 
     // set count without list;
 
     list.list = nullptr;
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
 
     // non enum attribute
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_BCAST_CPU_FLOOD_ENABLE, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_BCAST_CPU_FLOOD_ENABLE, &list));
 
     // invalid attribute
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, 10000, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, 10000, &list));
+}
+
+TEST(Meta, queryStatsCapability)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_stat_capability_list_t queue_stats_capability;
+    sai_stat_capability_t stat_initializer;
+    stat_initializer.stat_enum = 0;
+    stat_initializer.stat_modes = 0;
+    std::vector<sai_stat_capability_t> qstat_cap_list(20, stat_initializer);
+    queue_stats_capability.count = 15;
+    queue_stats_capability.list = qstat_cap_list.data();
+
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryStatsCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+    queue_stats_capability.list = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryStatsCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+}
+
+TEST(Meta, queryStatsStCapability)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_stat_st_capability_list_t queue_stats_capability;
+    sai_stat_st_capability_t stat_initializer;
+    stat_initializer.capability.stat_enum = 0;
+    stat_initializer.capability.stat_modes = 0;
+    stat_initializer.minimal_polling_interval = 0;
+    std::vector<sai_stat_st_capability_t> qstat_cap_list(20, stat_initializer);
+    queue_stats_capability.count = 15;
+    queue_stats_capability.list = qstat_cap_list.data();
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryStatsStCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+    queue_stats_capability.list = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryStatsStCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
 }
 
 TEST(Meta, meta_validate_stats)
@@ -1802,4 +1863,197 @@ TEST(Meta, quad_ars_profile)
     EXPECT_EQ(SAI_STATUS_SUCCESS, m.set(SAI_OBJECT_TYPE_ARS_PROFILE, ars_profile, &attr));
 
     EXPECT_EQ(SAI_STATUS_SUCCESS, m.remove(SAI_OBJECT_TYPE_ARS_PROFILE, ars_profile));
+}
+
+TEST(Meta, bulkGet)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t oids[1] = {0};
+    uint32_t attrcount[1] = {0};
+    sai_attribute_t* attrs[1] = {0};
+    sai_status_t statuses[1] = {0};
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            sai.bulkGet(
+                SAI_OBJECT_TYPE_PORT,
+                1,
+                oids,
+                attrcount,
+                attrs,
+                SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR,
+                statuses));
+}
+
+TEST(Meta, remove_flow_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_flow_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, remove_meter_bucket_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_meter_bucket_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, remove_prefix_compression_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_prefix_compression_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, isPortObjectIdValid)
+{
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_PORT), true);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_BRIDGE_PORT), true);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_LAG), true);
+
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_TUNNEL),false);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_NULL), false);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_VLAN), false);
+}
+
+TEST(Meta, getValidPortObjectTypes)
+{
+    auto v = Meta::getValidPortObjectTypes();
+
+    EXPECT_EQ(v.size(), 3);
+
+    auto s = boost::algorithm::join(v, ",");
+
+    EXPECT_EQ(s, "PORT,LAG,BRIDGE_PORT");
+}
+
+TEST(Meta, validate_uint32_range_on_create)
+{
+    SWSS_LOG_ENTER();
+
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switch_id = 0;
+    sai_attribute_t attr[2];
+
+    // Create switch first
+    attr[0].id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr[0].value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switch_id, SAI_NULL_OBJECT_ID, 1, attr));
+
+    // Use SAI_ACL_RANGE_ATTR_LIMIT which is UINT32_RANGE with CREATE_ONLY flag
+    sai_object_id_t acl_range_id;
+
+    // Test case 1: Valid range (min <= max) during CREATE
+    attr[0].id = SAI_ACL_RANGE_ATTR_TYPE;
+    attr[0].value.s32 = SAI_ACL_RANGE_TYPE_L4_DST_PORT_RANGE;
+    attr[1].id = SAI_ACL_RANGE_ATTR_LIMIT;
+    attr[1].value.u32range.min = 1024;
+    attr[1].value.u32range.max = 65535;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+
+    // Test case 2: Valid range with equal values (min == max)
+    attr[1].value.u32range.min = 8472;
+    attr[1].value.u32range.max = 8472;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+
+    // Test case 3: Invalid range (min > max) - should fail validation
+    attr[1].value.u32range.min = 65535;
+    attr[1].value.u32range.max = 1024;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+
+    // Test case 4: Invalid range with large difference (min > max)
+    attr[1].value.u32range.min = 4294967295;
+    attr[1].value.u32range.max = 0;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+
+    // Test case 5: Valid range at boundaries
+    attr[1].value.u32range.min = 0;
+    attr[1].value.u32range.max = 4294967295;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+}
+
+// Comprehensive test for all meta validation functions with range types
+TEST(Meta, meta_validation_functions_uint16_range)
+{
+    SWSS_LOG_ENTER();
+
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switch_id = 0;
+    sai_attribute_t attr[2];
+
+    // ========== Test 1: meta_generic_validation_create ==========
+    // Create switch with INIT_SWITCH attribute
+    attr[0].id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr[0].value.booldata = true;
+
+    // This calls meta_generic_validation_create internally
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switch_id, SAI_NULL_OBJECT_ID, 1, attr));
+
+    // ========== Test 2: meta_generic_validation_get ==========
+    // Get a READ_ONLY UINT16_RANGE attribute - this calls meta_generic_validation_get
+    sai_attribute_t get_attr;
+    get_attr.id = SAI_SWITCH_ATTR_FAST_LINKUP_POLLING_TIMEOUT_RANGE;
+
+    // Note: The get may succeed or fail depending on the implementation
+    // We're testing that the validation function is called
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.get(SAI_OBJECT_TYPE_SWITCH, switch_id, 1, &get_attr));
+}
+
+// Test meta_generic_validation_post_create and post_remove with range attributes
+TEST(Meta, meta_validation_post_create_remove_uint16_range)
+{
+    SWSS_LOG_ENTER();
+
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switch_id = 0;
+    sai_attribute_t attr[2];
+
+    // Create switch
+    attr[0].id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr[0].value.booldata = true;
+
+    // This calls meta_generic_validation_create
+    // On success, calls meta_generic_validation_post_create
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switch_id, SAI_NULL_OBJECT_ID, 1, attr));
+
+    // Create an ACL_RANGE object with UINT32_RANGE attribute
+    sai_object_id_t acl_range_id;
+    attr[0].id = SAI_ACL_RANGE_ATTR_TYPE;
+    attr[0].value.s32 = SAI_ACL_RANGE_TYPE_OUTER_VLAN;
+    attr[1].id = SAI_ACL_RANGE_ATTR_LIMIT;
+    attr[1].value.u32range.min = 100;
+    attr[1].value.u32range.max = 200;
+
+    // This calls meta_generic_validation_create with range validation
+    // On success, calls meta_generic_validation_post_create
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ACL_RANGE, &acl_range_id, switch_id, 2, attr));
+
+    // Verify the object was created by trying to get it
+    sai_attribute_t get_attr;
+    get_attr.id = SAI_ACL_RANGE_ATTR_LIMIT;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.get(SAI_OBJECT_TYPE_ACL_RANGE, acl_range_id, 1, &get_attr));
+
+    // Remove the ACL range object
+    // This calls meta_generic_validation_remove
+    // On success, calls meta_generic_validation_post_remove
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.remove(SAI_OBJECT_TYPE_ACL_RANGE, acl_range_id));
+
+    // Verify the object was removed
+    EXPECT_EQ(SAI_STATUS_ITEM_NOT_FOUND, m.remove(SAI_OBJECT_TYPE_ACL_RANGE, acl_range_id));
 }

@@ -163,9 +163,9 @@ sai_status_t transfer_attribute(
             transfer_primitive(src_attr.value.u16, dst_attr.value.u16);
             break;
 
-//        case SAI_ATTR_VALUE_TYPE_INT16:
-//            transfer_primitive(src_attr.value.s16, dst_attr.value.s16);
-//            break;
+        case SAI_ATTR_VALUE_TYPE_INT16:
+            transfer_primitive(src_attr.value.s16, dst_attr.value.s16);
+            break;
 
         case SAI_ATTR_VALUE_TYPE_UINT32:
             transfer_primitive(src_attr.value.u32, dst_attr.value.u32);
@@ -237,6 +237,10 @@ sai_status_t transfer_attribute(
 
         case SAI_ATTR_VALUE_TYPE_INT32_LIST:
             RETURN_ON_ERROR(transfer_list(src_attr.value.s32list, dst_attr.value.s32list, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
+            transfer_primitive(src_attr.value.u16range, dst_attr.value.u16range);
             break;
 
         case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
@@ -508,6 +512,34 @@ sai_status_t transfer_attribute(
 
         case SAI_ATTR_VALUE_TYPE_ACL_CHAIN_LIST:
             RETURN_ON_ERROR(transfer_list(src_attr.value.aclchainlist, dst_attr.value.aclchainlist, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_POE_PORT_POWER_CONSUMPTION:
+            transfer_primitive(src_attr.value.portpowerconsumption, dst_attr.value.portpowerconsumption);
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_PORT_PAM4_EYE_VALUES_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.portpam4eyevalues, dst_attr.value.portpam4eyevalues, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_TAPS_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.portserdestaps, dst_attr.value.portserdestaps, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_PRBS_PER_LANE_RX_STATUS_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.prbs_rx_status_list, dst_attr.value.prbs_rx_status_list, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_PRBS_PER_LANE_RX_STATE_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.prbs_rx_state_list, dst_attr.value.prbs_rx_state_list, countOnly));
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_PRBS_BIT_ERROR_RATE:
+            transfer_primitive(src_attr.value.prbs_ber, dst_attr.value.prbs_ber);
+            break;
+
+        case SAI_ATTR_VALUE_TYPE_PRBS_PER_LANE_BIT_ERROR_RATE_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.prbs_ber_list, dst_attr.value.prbs_ber_list, countOnly));
             break;
 
         default:
@@ -957,6 +989,53 @@ std::string sai_serialize_fdb_entry(
     return j.dump();
 }
 
+std::string sai_serialize_meter_bucket_entry(
+        _In_ const sai_meter_bucket_entry_t &meter_bucket_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(meter_bucket_entry.switch_id);
+    j["eni_id"] = sai_serialize_object_id(meter_bucket_entry.eni_id);
+    j["meter_class"] = sai_serialize_number<uint32_t>(meter_bucket_entry.meter_class);
+
+    return j.dump();
+}
+
+std::string sai_serialize_prefix_compression_entry(
+        _In_ const sai_prefix_compression_entry_t &prefix_compression_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(prefix_compression_entry.switch_id);
+    j["prefix_table_id"] = sai_serialize_object_id(prefix_compression_entry.prefix_table_id);
+    j["prefix"] = sai_serialize_ip_prefix(prefix_compression_entry.prefix);
+
+    return j.dump();
+}
+
+std::string sai_serialize_flow_entry(
+        _In_ const sai_flow_entry_t &flow_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(flow_entry.switch_id);
+    j["eni_mac"] = sai_serialize_mac(flow_entry.eni_mac);
+    j["vnet_id"] = sai_serialize_number<uint16_t>(flow_entry.vnet_id);
+    j["ip_proto"] = sai_serialize_number<uint8_t>(flow_entry.ip_proto);
+    j["src_ip"] = sai_serialize_ip_address(flow_entry.src_ip);
+    j["dst_ip"] = sai_serialize_ip_address(flow_entry.dst_ip);
+    j["src_port"] = sai_serialize_number<uint16_t>(flow_entry.src_port);
+    j["dst_port"] = sai_serialize_number<uint16_t>(flow_entry.dst_port);
+
+    return j.dump();
+}
+
 std::string sai_serialize_l2mc_entry_type(
         _In_ const sai_l2mc_entry_type_t type)
 {
@@ -1037,6 +1116,22 @@ std::string sai_serialize_buffer_pool_stat(
     return sai_serialize_enum(counter, &sai_metadata_enum_sai_buffer_pool_stat_t);
 }
 
+std::string sai_serialize_eni_stat(
+        _In_ const sai_eni_stat_t counter)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(counter, &sai_metadata_enum_sai_eni_stat_t);
+}
+
+std::string sai_serialize_meter_bucket_entry_stat(
+        _In_ const sai_meter_bucket_entry_stat_t counter)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(counter, &sai_metadata_enum_sai_meter_bucket_entry_stat_t);
+}
+
 std::string sai_serialize_tunnel_stat(
         _In_ const sai_tunnel_stat_t counter)
 {
@@ -1051,6 +1146,14 @@ std::string sai_serialize_counter_stat(
     SWSS_LOG_ENTER();
 
     return sai_serialize_enum(counter, &sai_metadata_enum_sai_counter_stat_t);
+}
+
+std::string sai_serialize_policer_stat(
+        _In_ const sai_policer_stat_t counter)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(counter, &sai_metadata_enum_sai_policer_stat_t);
 }
 
 std::string sai_serialize_queue_attr(
@@ -1129,6 +1232,41 @@ std::string sai_serialize_egress_drop_reason(
     SWSS_LOG_ENTER();
 
     return sai_serialize_enum(reason, &sai_metadata_enum_sai_out_drop_reason_t);
+}
+
+std::string sai_serialize_timespec(
+        _In_ const sai_timespec_t &timespec)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["tv_sec"] = sai_serialize_number<uint64_t>(timespec.tv_sec);
+    j["tv_nsec"] = sai_serialize_number<uint32_t>(timespec.tv_nsec);
+
+    return j.dump();
+}
+
+std::string sai_serialize_switch_asic_sdk_health_event(
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_asic_sdk_health_severity_t severity,
+        _In_ const sai_timespec_t &timestamp,
+        _In_ sai_switch_asic_sdk_health_category_t category,
+        _In_ const sai_switch_health_data_t &data,
+        _In_ const sai_u8_list_t &description)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(switch_id);
+    j["severity"] = sai_serialize_enum(severity, &sai_metadata_enum_sai_switch_asic_sdk_health_severity_t);
+    j["timestamp"] = sai_serialize_timespec(timestamp);
+    j["category"] = sai_serialize_enum(category, &sai_metadata_enum_sai_switch_asic_sdk_health_category_t);
+    j["data.data_type"] = sai_serialize_enum(data.data_type, &sai_metadata_enum_sai_health_data_type_t);
+    j["description"] = sai_serialize_number_list(description, false);
+
+    return j.dump();
 }
 
 std::string sai_serialize_switch_shutdown_request(
@@ -1299,7 +1437,7 @@ template <typename T>
 std::string sai_serialize_number_list(
         _In_ const T& list,
         _In_ bool countOnly,
-        _In_ bool hex = false)
+        _In_ bool hex)
 {
     SWSS_LOG_ENTER();
 
@@ -1783,8 +1921,8 @@ std::string sai_serialize_outbound_routing_entry(
     json j;
 
     j["switch_id"] = sai_serialize_object_id(outbound_routing_entry.switch_id);
-    j["eni_id"] = sai_serialize_object_id(outbound_routing_entry.eni_id);
     j["destination"] = sai_serialize_ip_prefix(outbound_routing_entry.destination);
+    j["outbound_routing_group_id"] = sai_serialize_object_id(outbound_routing_entry.outbound_routing_group_id);
 
     return j.dump();
 }
@@ -1799,6 +1937,47 @@ std::string sai_serialize_outbound_ca_to_pa_entry(
     j["switch_id"] = sai_serialize_object_id(outbound_ca_to_pa_entry.switch_id);
     j["dst_vnet_id"] = sai_serialize_object_id(outbound_ca_to_pa_entry.dst_vnet_id);
     j["dip"] = sai_serialize_ip_address(outbound_ca_to_pa_entry.dip);
+
+    return j.dump();
+}
+
+std::string sai_serialize_outbound_port_map_port_range_entry(
+        _In_ const sai_outbound_port_map_port_range_entry_t &outbound_port_map_port_range_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(outbound_port_map_port_range_entry.switch_id);
+    j["outbound_port_map_id"] = sai_serialize_object_id(outbound_port_map_port_range_entry.outbound_port_map_id);
+    j["dst_port_range"] = sai_serialize_range(outbound_port_map_port_range_entry.dst_port_range);
+
+    return j.dump();
+}
+
+std::string sai_serialize_global_trusted_vni_entry(
+        _In_ const sai_global_trusted_vni_entry_t &global_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(global_trusted_vni_entry.switch_id);
+    j["vni_range"] = sai_serialize_range(global_trusted_vni_entry.vni_range);
+
+    return j.dump();
+}
+
+std::string sai_serialize_eni_trusted_vni_entry(
+        _In_ const sai_eni_trusted_vni_entry_t &eni_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(eni_trusted_vni_entry.switch_id);
+    j["eni_id"] = sai_serialize_object_id(eni_trusted_vni_entry.eni_id);
+    j["vni_range"] = sai_serialize_range(eni_trusted_vni_entry.vni_range);
 
     return j.dump();
 }
@@ -1942,8 +2121,8 @@ std::string sai_serialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_JSON:
             return sai_serialize_json(attr.value.json);
 
-//        case SAI_ATTR_VALUE_TYPE_INT16:
-//            return sai_serialize_number(attr.value.s16);
+        case SAI_ATTR_VALUE_TYPE_INT16:
+            return sai_serialize_number(attr.value.s16);
 
         case SAI_ATTR_VALUE_TYPE_UINT32:
             return sai_serialize_number(attr.value.u32);
@@ -2004,6 +2183,9 @@ std::string sai_serialize_attr_value(
 
         case SAI_ATTR_VALUE_TYPE_INT32_LIST:
             return sai_serialize_enum_list(attr.value.s32list, meta.enummetadata, countOnly);
+
+        case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
+            return sai_serialize_range(attr.value.u16range);
 
         case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
             return sai_serialize_range(attr.value.u32range);
@@ -2096,6 +2278,9 @@ std::string sai_serialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_IP_PREFIX_LIST:
             return sai_serialize_ip_prefix_list(attr.value.ipprefixlist, countOnly);
 
+        case SAI_ATTR_VALUE_TYPE_POE_PORT_POWER_CONSUMPTION:
+            return sai_serialize_poe_port_power_consumption(attr.value.portpowerconsumption);
+
         default:
             SWSS_LOG_THROW("sai attr value type %s is not implemented, FIXME", sai_serialize_attr_value_type(meta.attrvaluetype).c_str());
     }
@@ -2128,6 +2313,14 @@ std::string sai_serialize_port_oper_status(
     SWSS_LOG_ENTER();
 
     return sai_serialize_enum(status, &sai_metadata_enum_sai_port_oper_status_t);
+}
+
+std::string sai_serialize_port_error_status(
+        _In_ sai_port_error_status_t status)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(status, &sai_metadata_enum_sai_port_error_status_t);
 }
 
 std::string sai_serialize_port_host_tx_ready(
@@ -2221,6 +2414,92 @@ std::string sai_serialize_bfd_session_state(
     return sai_serialize_enum(status, &sai_metadata_enum_sai_bfd_session_state_t);
 }
 
+std::string sai_serialize_icmp_echo_session_state(
+        _In_ sai_icmp_echo_session_state_t status)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(status, &sai_metadata_enum_sai_icmp_echo_session_state_t);
+}
+
+std::string sai_serialize_ha_set_event(
+        _In_ sai_ha_set_event_t event)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(event, &sai_metadata_enum_sai_ha_set_event_t);
+}
+
+std::string sai_serialize_ha_scope_event(
+        _In_ sai_ha_scope_event_t event)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(event, &sai_metadata_enum_sai_ha_scope_event_t);
+}
+
+std::string sai_serialize_ha_role(
+        _In_ sai_dash_ha_role_t role)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(role, &sai_metadata_enum_sai_dash_ha_role_t);
+}
+
+std::string sai_serialize_ha_state(
+        _In_ sai_dash_ha_state_t state)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(state, &sai_metadata_enum_sai_dash_ha_state_t);
+}
+
+std::string sai_serialize_twamp_session_state(
+        _In_ sai_twamp_session_state_t status)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(status, &sai_metadata_enum_sai_twamp_session_state_t);
+}
+
+std::string sai_serialize_twamp_session_stat(
+        _In_ sai_twamp_session_stat_t counter)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(counter, &sai_metadata_enum_sai_twamp_session_stat_t);
+}
+
+static json sai_serialize_json_twamp_session_event_notification_data(
+        _In_ const sai_twamp_session_event_notification_data_t& twamp_session_data)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["twamp_session_id"] = sai_serialize_object_id(twamp_session_data.twamp_session_id);
+    j["session_state"] = sai_serialize_twamp_session_state(twamp_session_data.session_state);
+
+    j["index"] = sai_serialize_number(twamp_session_data.session_stats.index);
+
+    json arr = json::array();
+
+    for (uint32_t i = 0; i < twamp_session_data.session_stats.number_of_counters; ++i)
+    {
+        json item;
+
+        item["counters_ids"] = sai_serialize_twamp_session_stat(twamp_session_data.session_stats.counters_ids[i]);
+        item["counters"] = sai_serialize_number(twamp_session_data.session_stats.counters[i]);
+
+        arr.push_back(item);
+    }
+
+    j["list"] = arr;
+
+    // we don't need count since it can be deduced
+    return j;
+}
+
 std::string sai_serialize_fdb_event_ntf(
         _In_ uint32_t count,
         _In_ const sai_fdb_event_notification_data_t* fdb_event)
@@ -2288,6 +2567,7 @@ std::string sai_serialize_port_oper_status_ntf(
 
         item["port_id"] = sai_serialize_object_id(port_oper_status[i].port_id);
         item["port_state"] = sai_serialize_port_oper_status(port_oper_status[i].port_state);
+        item["port_error_status"] = sai_serialize_port_error_status(port_oper_status[i].port_error_status);
 
         j.push_back(item);
     }
@@ -2361,6 +2641,110 @@ std::string sai_serialize_bfd_session_state_ntf(
 
         item["bfd_session_id"] = sai_serialize_object_id(bfd_session_state[i].bfd_session_id);
         item["session_state"] = sai_serialize_bfd_session_state(bfd_session_state[i].session_state);
+
+        j.push_back(item);
+    }
+
+    // we don't need count since it can be deduced
+    return j.dump();
+}
+
+std::string sai_serialize_icmp_echo_session_state_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_icmp_echo_session_state_notification_t* icmp_echo_session_state)
+{
+    SWSS_LOG_ENTER();
+
+    if (icmp_echo_session_state == NULL)
+    {
+        SWSS_LOG_THROW("icmp_echo_session _state pointer is null");
+    }
+
+    json j = json::array();
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+	json item;
+        item["icmp_echo_session_id"] = sai_serialize_object_id(icmp_echo_session_state[i].icmp_echo_session_id);
+        item["session_state"] = sai_serialize_icmp_echo_session_state(icmp_echo_session_state[i].session_state);
+
+        j.push_back(item);
+    }
+
+    return j.dump();
+}
+
+std::string sai_serialize_ha_set_event_ntf(
+    _In_ uint32_t count,
+    _In_ const sai_ha_set_event_data_t* ha_set_event)
+{
+    SWSS_LOG_ENTER();
+
+    if (ha_set_event == NULL)
+    {
+        SWSS_LOG_THROW("ha_set_event pointer is null");
+    }
+
+    json j = json::array();
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        json item;
+
+        item["event_type"] = sai_serialize_ha_set_event(ha_set_event[i].event_type);
+        item["ha_set_id"] = sai_serialize_object_id(ha_set_event[i].ha_set_id);
+
+        j.push_back(item);
+    }
+
+    return j.dump();
+}
+
+std::string sai_serialize_ha_scope_event_ntf(
+    _In_ uint32_t count,
+    _In_ const sai_ha_scope_event_data_t* ha_scope_event)
+{
+    SWSS_LOG_ENTER();
+
+    if (ha_scope_event == NULL)
+    {
+        SWSS_LOG_THROW("ha_scope_event pointer is null");
+    }
+
+    json j = json::array();
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        json item;
+
+        item["event_type"] = sai_serialize_ha_scope_event(ha_scope_event[i].event_type);
+        item["ha_scope_id"] = sai_serialize_object_id(ha_scope_event[i].ha_scope_id);
+        item["ha_role"] = sai_serialize_ha_role(ha_scope_event[i].ha_role);
+        item["flow_version"] = sai_serialize_number(ha_scope_event[i].flow_version);
+        item["ha_state"] = sai_serialize_ha_state(ha_scope_event[i].ha_state);
+
+        j.push_back(item);
+    }
+
+    return j.dump();
+}
+
+std::string sai_serialize_twamp_session_event_ntf(
+        _In_ uint32_t count,
+        _In_ const sai_twamp_session_event_notification_data_t* twamp_session_event)
+{
+    SWSS_LOG_ENTER();
+
+    if (twamp_session_event == NULL)
+    {
+        SWSS_LOG_THROW("twamp_session_state pointer is null");
+    }
+
+    json j = json::array();
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        json item = sai_serialize_json_twamp_session_event_notification_data(twamp_session_event[i]);
 
         j.push_back(item);
     }
@@ -2500,6 +2884,10 @@ static bool sai_serialize_object_entry(
             key = sai_serialize_mcast_fdb_entry(key_entry.mcast_fdb_entry);
             return true;
 
+        case SAI_OBJECT_TYPE_PREFIX_COMPRESSION_ENTRY:
+            key = sai_serialize_prefix_compression_entry(key_entry.prefix_compression_entry);
+            return true;
+
         default:
             return false;
     }
@@ -2540,6 +2928,26 @@ static bool sai_serialize_object_extension_entry(
 
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             key = sai_serialize_outbound_ca_to_pa_entry(key_entry.outbound_ca_to_pa_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_FLOW_ENTRY:
+            key = sai_serialize_flow_entry(key_entry.flow_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_METER_BUCKET_ENTRY:
+            key = sai_serialize_meter_bucket_entry(key_entry.meter_bucket_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            key = sai_serialize_outbound_port_map_port_range_entry(key_entry.outbound_port_map_port_range_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            key = sai_serialize_global_trusted_vni_entry(key_entry.global_trusted_vni_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            key = sai_serialize_eni_trusted_vni_entry(key_entry.eni_trusted_vni_entry);
             return true;
 
         default:
@@ -2670,6 +3078,199 @@ std::string sai_serialize_redis_link_event_damping_aied_config(
     j["reuse_threshold"] = sai_serialize_number(value.reuse_threshold, false);
     j["decay_half_life"] = sai_serialize_number(value.decay_half_life, false);
     j["flap_penalty"] = sai_serialize_number(value.flap_penalty, false);
+
+    return j.dump();
+}
+
+json sai_serialize_stat_capability(
+        _In_ const sai_stat_capability_t& stat_capability,
+        _In_ const sai_enum_metadata_t* meta)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["stat_enum"] = sai_serialize_enum(stat_capability.stat_enum, meta);
+
+    json arr = json::array();
+
+    for (uint32_t i = 0; i < sai_metadata_enum_sai_stats_mode_t.valuescount; ++i)
+    {
+	if (stat_capability.stat_modes & sai_metadata_enum_sai_stats_mode_t.values[i])
+	{
+            json item = sai_serialize_enum(sai_metadata_enum_sai_stats_mode_t.values[i],
+                            &sai_metadata_enum_sai_stats_mode_t);
+
+            arr.push_back(item);
+	}
+    }
+
+    j["stat_modes"] = arr;
+
+    return j;
+}
+
+std::string sai_serialize_stats_capability_list(
+        _In_ const sai_stat_capability_list_t& stat_capability_list,
+        _In_ const sai_enum_metadata_t* meta,
+        _In_ bool countOnly)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["count"] = stat_capability_list.count;
+
+    if (stat_capability_list.list == NULL || countOnly)
+    {
+        j["list"] = nullptr;
+
+        return j.dump();
+    }
+
+    json arr = json::array();
+
+    for (uint32_t i = 0; i < stat_capability_list.count; ++i)
+    {
+        json item = sai_serialize_stat_capability(stat_capability_list.list[i], meta);
+
+        arr.push_back(item);
+    }
+
+    j["list"] = arr;
+
+    return j.dump();
+}
+
+json sai_serialize_stat_st_capability(
+        _In_ const sai_stat_st_capability_t &stat_capability,
+        _In_ const sai_enum_metadata_t *meta)
+{
+    SWSS_LOG_ENTER();
+
+    json j = sai_serialize_stat_capability(stat_capability.capability, meta);
+    j["minimal_polling_interval"] = sai_serialize_number(stat_capability.minimal_polling_interval, false);
+
+    return j;
+}
+
+std::string sai_serialize_stats_st_capability_list(
+        _In_ const sai_stat_st_capability_list_t &stat_capability_list,
+        _In_ const sai_enum_metadata_t *meta,
+        _In_ bool countOnly)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["count"] = stat_capability_list.count;
+
+    if (stat_capability_list.list == NULL || countOnly)
+    {
+        j["list"] = nullptr;
+
+        return j.dump();
+    }
+
+    json arr = json::array();
+
+    for (uint32_t i = 0; i < stat_capability_list.count; ++i)
+    {
+        json item = sai_serialize_stat_st_capability(stat_capability_list.list[i], meta);
+
+        arr.push_back(item);
+    }
+
+    j["list"] = arr;
+
+    return j.dump();
+}
+
+std::string sai_serialize_poe_port_active_channel_type(
+        _In_ const sai_poe_port_active_channel_type_t value)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(value, &sai_metadata_enum_sai_poe_port_active_channel_type_t);
+}
+
+std::string sai_serialize_poe_port_class_method_type(
+        _In_ const sai_poe_port_class_method_type_t value)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(value, &sai_metadata_enum_sai_poe_port_class_method_type_t);
+}
+
+std::string sai_serialzie_poe_port_signature_type(
+        _In_ const sai_poe_port_signature_type_t value)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(value, &sai_metadata_enum_sai_poe_port_signature_type_t);
+}
+
+std::string sai_serialize_poe_port_power_consumption(
+        _In_ const sai_poe_port_power_consumption_t& value)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["active_channel"] = sai_serialize_poe_port_active_channel_type(value.active_channel);
+    j["voltage"] = sai_serialize_number(value.voltage, false);
+    j["current"] = sai_serialize_number(value.current, false);
+    j["consumption"] = sai_serialize_number(value.consumption, false);
+    j["signature_type"] = sai_serialzie_poe_port_signature_type(value.signature_type);
+    j["class_method"] = sai_serialize_poe_port_class_method_type(value.class_method);
+    j["measured_class_a"] = sai_serialize_number(value.measured_class_a, false);
+    j["assigned_class_a"] = sai_serialize_number(value.assigned_class_a, false);
+    j["measured_class_b"] = sai_serialize_number(value.measured_class_b, false);
+    j["assigned_class_b"] = sai_serialize_number(value.assigned_class_b, false);
+
+    return j.dump();
+}
+
+std::string sai_serialize_switch_macsec_post_status(
+        _In_ const sai_switch_macsec_post_status_t switch_macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(switch_macsec_post_status, &sai_metadata_enum_sai_switch_macsec_post_status_t);
+}
+
+std::string sai_serialize_switch_macsec_post_status_ntf(
+        _In_ sai_object_id_t switch_id,
+        _In_ const sai_switch_macsec_post_status_t switch_macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(switch_id);
+    j["macsec_post_status"] = sai_serialize_switch_macsec_post_status(switch_macsec_post_status);
+
+    return j.dump();
+}
+
+std::string sai_serialize_macsec_post_status(
+        _In_ const sai_macsec_post_status_t macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    return sai_serialize_enum(macsec_post_status, &sai_metadata_enum_sai_macsec_post_status_t);
+}
+
+std::string sai_serialize_macsec_post_status_ntf(
+        _In_ sai_object_id_t macsec_id,
+        _In_ const sai_macsec_post_status_t macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["macsec_id"] = sai_serialize_object_id(macsec_id);
+    j["macsec_post_status"] = sai_serialize_macsec_post_status(macsec_post_status);
 
     return j.dump();
 }
@@ -3808,8 +4409,8 @@ void sai_deserialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_JSON:
             return sai_deserialize_json(s, attr.value.json);
 
-//        case SAI_ATTR_VALUE_TYPE_INT16:
-//            return sai_deserialize_number(s, attr.value.s16);
+        case SAI_ATTR_VALUE_TYPE_INT16:
+            return sai_deserialize_number(s, attr.value.s16);
 
         case SAI_ATTR_VALUE_TYPE_UINT32:
             return sai_deserialize_number(s, attr.value.u32);
@@ -3870,6 +4471,9 @@ void sai_deserialize_attr_value(
 
         case SAI_ATTR_VALUE_TYPE_INT32_LIST:
             return sai_deserialize_enum_list(s, meta.enummetadata, attr.value.s32list, countOnly);
+
+        case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
+            return sai_deserialize_range(s, attr.value.u16range);
 
         case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
             return sai_deserialize_range(s, attr.value.u32range);
@@ -3960,8 +4564,12 @@ void sai_deserialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_IP_PREFIX_LIST:
             return sai_deserialize_ip_prefix_list(s, attr.value.ipprefixlist, countOnly);
 
+        case SAI_ATTR_VALUE_TYPE_POE_PORT_POWER_CONSUMPTION:
+            return sai_deserialize_poe_port_power_consumption(s, attr.value.portpowerconsumption);
+
         default:
-            SWSS_LOG_THROW("deserialize type %d is not supported yet FIXME", meta.attrvaluetype);
+            SWSS_LOG_THROW("deserialize type %s is not supported yet FIXME",
+                    sai_serialize_attr_value_type(meta.attrvaluetype).c_str());
     }
 }
 
@@ -3981,6 +4589,15 @@ void sai_deserialize_port_oper_status(
     SWSS_LOG_ENTER();
 
     sai_deserialize_enum(s, &sai_metadata_enum_sai_port_oper_status_t, (int32_t&)status);
+}
+
+void sai_deserialize_port_error_status(
+        _In_ const std::string& s,
+        _Out_ sai_port_error_status_t& status)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_port_error_status_t, (int32_t&)status);
 }
 
 void sai_deserialize_port_host_tx_ready_status(
@@ -4046,6 +4663,69 @@ void sai_deserialize_bfd_session_state(
     sai_deserialize_enum(s, &sai_metadata_enum_sai_bfd_session_state_t, (int32_t&)state);
 }
 
+void sai_deserialize_icmp_echo_session_state(
+        _In_ const std::string& s,
+        _Out_ sai_icmp_echo_session_state_t& state)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_icmp_echo_session_state_t, (int32_t&)state);
+}
+
+void sai_deserialize_ha_set_event(
+        _In_ const std::string& s,
+        _Out_ sai_ha_set_event_t& event)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_ha_set_event_t, (int32_t&)event);
+}
+
+void sai_deserialize_ha_scope_event(
+        _In_ const std::string& s,
+        _Out_ sai_ha_scope_event_t& event)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_ha_scope_event_t, (int32_t&)event);
+}
+
+void sai_deserialize_ha_role(
+        _In_ const std::string& s,
+        _Out_ sai_dash_ha_role_t& role)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_dash_ha_role_t, (int32_t&)role);
+}
+
+void sai_deserialize_ha_state(
+        _In_ const std::string& s,
+        _Out_ sai_dash_ha_state_t& state)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_dash_ha_state_t, (int32_t&)state);
+}
+
+void sai_deserialize_twamp_session_state(
+        _In_ const std::string& s,
+        _Out_ sai_twamp_session_state_t& state)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_twamp_session_state_t, (int32_t&)state);
+}
+
+void sai_deserialize_twamp_session_stat(
+        _In_ const std::string& s,
+        _Out_ sai_twamp_session_stat_t& stat)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_twamp_session_stat_t, (int32_t&)stat);
+}
+
 void sai_deserialize_switch_oper_status(
         _In_ const std::string& s,
         _Out_ sai_object_id_t &switch_id,
@@ -4057,6 +4737,66 @@ void sai_deserialize_switch_oper_status(
 
     sai_deserialize_object_id(j["switch_id"], switch_id);
     sai_deserialize_enum(j["status"], &sai_metadata_enum_sai_switch_oper_status_t, (int32_t&)status);
+}
+
+void sai_deserialize_timespec(
+        _In_ const std::string& s,
+        _Out_ sai_timespec_t &timestamp)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+    try
+    {
+        j = json::parse(s);
+    }
+    catch (const std::exception&)
+    {
+        SWSS_LOG_THROW("Received an exception after trying to parse timespec_t from %s", s.c_str());
+    }
+
+    sai_deserialize_number<uint64_t>(j["tv_sec"], timestamp.tv_sec);
+    sai_deserialize_number<uint32_t>(j["tv_nsec"], timestamp.tv_nsec);
+}
+
+void sai_deserialize_switch_asic_sdk_health_event(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t &switch_id,
+        _Out_ sai_switch_asic_sdk_health_severity_t &severity,
+        _Out_ sai_timespec_t &timestamp,
+        _Out_ sai_switch_asic_sdk_health_category_t &category,
+        _Out_ sai_switch_health_data_t &data,
+        _Out_ sai_u8_list_t &description)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+    try
+    {
+        j = json::parse(s);
+    }
+    catch (const std::exception&)
+    {
+        SWSS_LOG_THROW("Received an exception after trying to parse switch_asic_sdk_health_event from %s", s.c_str());
+    }
+
+    sai_deserialize_object_id(j["switch_id"], switch_id);
+    sai_deserialize_enum(j["severity"], &sai_metadata_enum_sai_switch_asic_sdk_health_severity_t, (int32_t&)severity);
+    sai_deserialize_timespec(j["timestamp"], timestamp);
+    sai_deserialize_enum(j["category"], &sai_metadata_enum_sai_switch_asic_sdk_health_category_t, (int32_t&)category);
+    int32_t data_type;
+    sai_deserialize_enum(j["data.data_type"], &sai_metadata_enum_sai_health_data_type_t, data_type);
+    data.data_type = (sai_health_data_type_t)data_type;
+    data.data_type = SAI_HEALTH_DATA_TYPE_GENERAL;
+    sai_deserialize_number_list(j["description"], description, false, false);
+}
+
+void sai_deserialize_free_switch_asic_sdk_health_event(
+        _In_ sai_u8_list_t &description)
+{
+    SWSS_LOG_ENTER();
+
+    sai_free_list(description);
 }
 
 void sai_deserialize_switch_shutdown_request(
@@ -4130,6 +4870,142 @@ void sai_deserialize_neighbor_entry(
     sai_deserialize_object_id(j["switch_id"], ne.switch_id);
     sai_deserialize_object_id(j["rif"], ne.rif_id);
     sai_deserialize_ip_address(j["ip"], ne.ip_address);
+}
+
+void sai_deserialize_meter_bucket_entry(
+        _In_ const std::string& s,
+        _Out_ sai_meter_bucket_entry_t& meter_bucket_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], meter_bucket_entry.switch_id);
+    sai_deserialize_object_id(j["eni_id"], meter_bucket_entry.eni_id);
+    sai_deserialize_number(j["meter_class"], meter_bucket_entry.meter_class);
+}
+
+void sai_deserialize_prefix_compression_entry(
+        _In_ const std::string& s,
+        _Out_ sai_prefix_compression_entry_t& prefix_compression_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], prefix_compression_entry.switch_id);
+    sai_deserialize_object_id(j["prefix_table_id"], prefix_compression_entry.prefix_table_id);
+    sai_deserialize_ip_prefix(j["prefix"], prefix_compression_entry.prefix);
+}
+
+void sai_deserialize_flow_entry(
+        _In_ const std::string& s,
+        _Out_ sai_flow_entry_t &flow_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], flow_entry.switch_id);
+    sai_deserialize_mac(j["eni_mac"], flow_entry.eni_mac);
+    sai_deserialize_number(j["vnet_id"], flow_entry.vnet_id);
+    sai_deserialize_number(j["ip_proto"], flow_entry.ip_proto);
+    sai_deserialize_ip_address(j["src_ip"], flow_entry.src_ip);
+    sai_deserialize_ip_address(j["dst_ip"], flow_entry.dst_ip);
+    sai_deserialize_number(j["src_port"], flow_entry.src_port);
+    sai_deserialize_number(j["dst_port"], flow_entry.dst_port);
+}
+
+void sai_deserialize_outbound_port_map_port_range_entry(
+        _In_ const std::string& s,
+        _Out_ sai_outbound_port_map_port_range_entry_t& outbound_port_map_port_range_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], outbound_port_map_port_range_entry.switch_id);
+    sai_deserialize_object_id(j["outbound_port_map_id"], outbound_port_map_port_range_entry.outbound_port_map_id);
+    sai_deserialize_range(j["dst_port_range"], outbound_port_map_port_range_entry.dst_port_range);
+}
+
+void sai_deserialize_global_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_global_trusted_vni_entry_t& global_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], global_trusted_vni_entry.switch_id);
+    sai_deserialize_range(j["vni_range"], global_trusted_vni_entry.vni_range);
+}
+
+void sai_deserialize_eni_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_eni_trusted_vni_entry_t& eni_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], eni_trusted_vni_entry.switch_id);
+    sai_deserialize_object_id(j["eni_id"], eni_trusted_vni_entry.eni_id);
+    sai_deserialize_range(j["vni_range"], eni_trusted_vni_entry.vni_range);
+}
+
+void sai_deserialize_twamp_session_stats_data(
+        _In_ const std::string& s,
+        _Out_ sai_twamp_session_stats_data_t &twamp_session_stats_data)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_number(j["index"], twamp_session_stats_data.index);
+
+    json arr = j["list"];
+
+    twamp_session_stats_data.number_of_counters = (uint32_t)arr.size();
+    twamp_session_stats_data.counters_ids = new sai_twamp_session_stat_t[twamp_session_stats_data.number_of_counters];
+    twamp_session_stats_data.counters = new uint64_t[twamp_session_stats_data.number_of_counters];
+
+    for (uint32_t i = 0; i < twamp_session_stats_data.number_of_counters; ++i)
+    {
+        const json &item = arr[i];
+
+        sai_deserialize_twamp_session_stat(item["counters_ids"], twamp_session_stats_data.counters_ids[i]);
+
+        sai_deserialize_number(item["counters"], twamp_session_stats_data.counters[i]);
+    }
+}
+
+void sai_deserialize_json_twamp_session_event_notification_data(
+        _In_ const json& j,
+        _Out_ sai_twamp_session_event_notification_data_t& twamp_session_data)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_object_id(j["twamp_session_id"], twamp_session_data.twamp_session_id);
+    sai_deserialize_twamp_session_state(j["session_state"], twamp_session_data.session_state);
+
+    sai_deserialize_number(j["index"], twamp_session_data.session_stats.index);
+
+    json arr = j["list"];
+
+    twamp_session_data.session_stats.number_of_counters = (uint32_t)arr.size();
+    twamp_session_data.session_stats.counters_ids = new sai_twamp_session_stat_t[twamp_session_data.session_stats.number_of_counters];
+    twamp_session_data.session_stats.counters = new uint64_t[twamp_session_data.session_stats.number_of_counters];
+
+    for (uint32_t i = 0; i < twamp_session_data.session_stats.number_of_counters; ++i)
+    {
+        const json &item = arr[i];
+
+        sai_deserialize_twamp_session_stat(item["counters_ids"], twamp_session_data.session_stats.counters_ids[i]);
+
+        sai_deserialize_number(item["counters"], twamp_session_data.session_stats.counters[i]);
+    }
+
 }
 
 #define EXPECT(x) { \
@@ -4410,8 +5286,8 @@ void sai_deserialize_outbound_routing_entry(
     json j = json::parse(s);
 
     sai_deserialize_object_id(j["switch_id"], outbound_routing_entry.switch_id);
-    sai_deserialize_object_id(j["eni_id"], outbound_routing_entry.eni_id);
     sai_deserialize_ip_prefix(j["destination"], outbound_routing_entry.destination);
+    sai_deserialize_object_id(j["outbound_routing_group_id"], outbound_routing_entry.outbound_routing_group_id);
 }
 
 void sai_deserialize_outbound_ca_to_pa_entry(
@@ -4511,6 +5387,10 @@ bool sai_deserialize_object_entry(
             sai_deserialize_mcast_fdb_entry(object_id, meta_key.objectkey.key.mcast_fdb_entry);
             return true;
 
+        case SAI_OBJECT_TYPE_PREFIX_COMPRESSION_ENTRY:
+            sai_deserialize_prefix_compression_entry(object_id, meta_key.objectkey.key.prefix_compression_entry);
+            return true;
+
         default:
             return false;
     }
@@ -4550,6 +5430,26 @@ bool sai_deserialize_object_extension_entry(
 
         case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
             sai_deserialize_outbound_ca_to_pa_entry(object_id, meta_key.objectkey.key.outbound_ca_to_pa_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_FLOW_ENTRY:
+            sai_deserialize_flow_entry(object_id, meta_key.objectkey.key.flow_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_METER_BUCKET_ENTRY:
+            sai_deserialize_meter_bucket_entry(object_id, meta_key.objectkey.key.meter_bucket_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            sai_deserialize_outbound_port_map_port_range_entry(object_id, meta_key.objectkey.key.outbound_port_map_port_range_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            sai_deserialize_global_trusted_vni_entry(object_id, meta_key.objectkey.key.global_trusted_vni_entry);
+            return true;
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            sai_deserialize_eni_trusted_vni_entry(object_id, meta_key.objectkey.key.eni_trusted_vni_entry);
             return true;
 
         default:
@@ -4689,6 +5589,7 @@ void sai_deserialize_port_oper_status_ntf(
     {
         sai_deserialize_object_id(j[i]["port_id"], data[i].port_id);
         sai_deserialize_port_oper_status(j[i]["port_state"], data[i].port_state);
+        sai_deserialize_port_error_status(j[i]["port_error_status"], data[i].port_error_status);
     }
 
     *port_oper_status = data;
@@ -4751,6 +5652,96 @@ void sai_deserialize_bfd_session_state_ntf(
     }
 
     *bfd_session_state = data;
+}
+
+void sai_deserialize_icmp_echo_session_state_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_icmp_echo_session_state_notification_t** icmp_echo_session_state)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    count = (uint32_t)j.size();
+
+    auto data = new sai_icmp_echo_session_state_notification_t[count];
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_deserialize_object_id(j[i]["icmp_echo_session_id"], data[i].icmp_echo_session_id);
+        sai_deserialize_icmp_echo_session_state(j[i]["session_state"], data[i].session_state);
+    }
+
+    *icmp_echo_session_state = data;
+}
+
+void sai_deserialize_ha_set_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_ha_set_event_data_t** ha_set_event)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    count = (uint32_t)j.size();
+
+    auto data = new sai_ha_set_event_data_t[count];
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_deserialize_ha_set_event(j[i]["event_type"], data[i].event_type);
+        sai_deserialize_object_id(j[i]["ha_set_id"], data[i].ha_set_id);
+    }
+
+    *ha_set_event = data;
+}
+
+void sai_deserialize_ha_scope_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_ha_scope_event_data_t** ha_scope_event)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    count = (uint32_t)j.size();
+
+    auto data = new sai_ha_scope_event_data_t[count];
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_deserialize_ha_scope_event(j[i]["event_type"], data[i].event_type);
+        sai_deserialize_object_id(j[i]["ha_scope_id"], data[i].ha_scope_id);
+        sai_deserialize_ha_role(j[i]["ha_role"], data[i].ha_role);
+        sai_deserialize_number(j[i]["flow_version"], data[i].flow_version);
+        sai_deserialize_ha_state(j[i]["ha_state"], data[i].ha_state);
+    }
+
+    *ha_scope_event = data;
+}
+
+void sai_deserialize_twamp_session_event_ntf(
+        _In_ const std::string& s,
+        _Out_ uint32_t &count,
+        _Out_ sai_twamp_session_event_notification_data_t** twamp_session_event)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    count = (uint32_t)j.size();
+
+    auto data = new sai_twamp_session_event_notification_data_t[count];
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_deserialize_json_twamp_session_event_notification_data(j[i], data[i]);
+    }
+
+    *twamp_session_event = data;
 }
 
 // deserialize free
@@ -4817,6 +5808,7 @@ void sai_deserialize_free_attribute_value(
             sai_free_list(attr.value.s32list);
             break;
 
+        case SAI_ATTR_VALUE_TYPE_UINT16_RANGE:
         case SAI_ATTR_VALUE_TYPE_UINT32_RANGE:
         case SAI_ATTR_VALUE_TYPE_INT32_RANGE:
             break;
@@ -4925,9 +5917,59 @@ void sai_deserialize_free_attribute_value(
             sai_free_list(attr.value.ipprefixlist);
             break;
 
+        case SAI_ATTR_VALUE_TYPE_POE_PORT_POWER_CONSUMPTION:
+            break;
+
         default:
             SWSS_LOG_THROW("sai attr value %s is not implemented, FIXME", sai_serialize_attr_value_type(type).c_str());
     }
+}
+
+void sai_deserialize_poe_port_active_channel_type(
+        _In_ const std::string& s,
+        _Out_ sai_poe_port_active_channel_type_t& value)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_poe_port_active_channel_type_t, (int32_t&)value);
+}
+
+void sai_deserialize_poe_port_class_method_type(
+        _In_ const std::string& s,
+        _Out_ sai_poe_port_class_method_type_t& value)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_poe_port_class_method_type_t, (int32_t&)value);
+}
+
+void sai_deserialzie_poe_port_signature_type(
+        _In_ const std::string& s,
+        _Out_ sai_poe_port_signature_type_t& value)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_poe_port_signature_type_t, (int32_t&)value);
+}
+
+void sai_deserialize_poe_port_power_consumption(
+        _In_ const std::string& s,
+        _Out_ sai_poe_port_power_consumption_t& value)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_poe_port_active_channel_type(j["active_channel"], value.active_channel);
+    sai_deserialize_number(j["voltage"], value.voltage);
+    sai_deserialize_number(j["current"], value.current);
+    sai_deserialize_number(j["consumption"], value.consumption);
+    sai_deserialize_poe_port_class_method_type(j["class_method"], value.class_method);
+    sai_deserialzie_poe_port_signature_type(j["signature_type"],value.signature_type);
+    sai_deserialize_number(j["measured_class_a"], value.measured_class_a);
+    sai_deserialize_number(j["assigned_class_a"], value.assigned_class_a);
+    sai_deserialize_number(j["measured_class_b"], value.measured_class_b);
+    sai_deserialize_number(j["assigned_class_b"], value.assigned_class_b);
 }
 
 // deserialize free notifications
@@ -5013,6 +6055,42 @@ void sai_deserialize_free_bfd_session_state_ntf(
     SWSS_LOG_ENTER();
 
     delete[] bfd_session_state;
+}
+
+void sai_deserialize_free_icmp_echo_session_state_ntf(
+        _In_ uint32_t count,
+        _In_ sai_icmp_echo_session_state_notification_t* icmp_echo_session_state)
+{
+    SWSS_LOG_ENTER();
+
+    delete[] icmp_echo_session_state;
+}
+
+void sai_deserialize_free_ha_set_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_ha_set_event_data_t* ha_set_event)
+{
+    SWSS_LOG_ENTER();
+
+    delete[] ha_set_event;
+}
+
+void sai_deserialize_free_ha_scope_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_ha_scope_event_data_t* ha_scope_event)
+{
+    SWSS_LOG_ENTER();
+
+    delete[] ha_scope_event;
+}
+
+void sai_deserialize_free_twamp_session_event_ntf(
+        _In_ uint32_t count,
+        _In_ sai_twamp_session_event_notification_data_t* twamp_session_event)
+{
+    SWSS_LOG_ENTER();
+
+    delete[] twamp_session_event;
 }
 
 void sai_deserialize_ingress_priority_group_attr(
@@ -5172,4 +6250,216 @@ void sai_deserialize_redis_link_event_damping_aied_config(
     sai_deserialize_number(j["reuse_threshold"], value.reuse_threshold, false);
     sai_deserialize_number(j["decay_half_life"], value.decay_half_life, false);
     sai_deserialize_number(j["flap_penalty"], value.flap_penalty, false);
+}
+
+/**
+*   @brief deserialize the stats capability list
+*
+*   Iterates thru stat_enum_str and populate
+*   the stats_capability with respective
+*   stat_enum (String to Enum conversion).
+*   Also iterates thru stat_modes_str and populate
+*   the stats_capability with respective
+*   stat_modes (String to Enum conversion)
+*
+*   @param stats_capability stats capability enum list
+*   @param stat_enum_str SAI stat enum list as string
+*   @param stat_modes_str SAI stat mode list as string
+*   @return Void
+*/
+void sai_deserialize_stats_capability_list(
+        _Inout_ sai_stat_capability_list_t *stats_capability,
+        _In_ const std::string& stat_enum_str,
+        _In_ const std::string& stat_modes_str)
+{
+    SWSS_LOG_ENTER();
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_THROW("Stats capability pointer in deserialize is NULL");
+    }
+
+    uint32_t num_capabilities = stats_capability->count;
+    size_t stat_enum_position = 0;
+    size_t stat_modes_position = 0;
+
+    for (uint32_t i = 0; i < num_capabilities; i++)
+    {
+        /* 1. Populate stat_enum */
+        size_t old_stat_enum_position = stat_enum_position;
+        stat_enum_position = stat_enum_str.find(",", old_stat_enum_position);
+        std::string stat_enum = stat_enum_str.substr(old_stat_enum_position,
+                stat_enum_position - old_stat_enum_position);
+        stats_capability->list[i].stat_enum = std::stoi(stat_enum);
+
+        /* We have run out of values to add to our list */
+        if (stat_enum_position == std::string::npos)
+        {
+            if (num_capabilities != i + 1)
+            {
+                SWSS_LOG_THROW("Lesser stat_enums than expected: expected %d, received %d",
+                        num_capabilities, i+1);
+            }
+
+            break;
+        }
+
+        /* 2. Populate stat_modes */
+        size_t old_stat_modes_position = stat_modes_position;
+        stat_modes_position = stat_modes_str.find(",", old_stat_modes_position);
+        std::string stat_modes = stat_modes_str.substr(old_stat_modes_position,
+                stat_modes_position - old_stat_modes_position);
+        stats_capability->list[i].stat_modes = std::stoi(stat_modes);
+
+        /* We have run out of values to add to our list */
+        if (stat_modes_position == std::string::npos)
+        {
+            if (num_capabilities != i + 1)
+            {
+                SWSS_LOG_THROW("Lesser stat_modes than expected: expected %d, received %d",
+                        num_capabilities, i+1);
+            }
+
+            break;
+        }
+
+        /* Skip the commas */
+        stat_enum_position++;
+        stat_modes_position++;
+    }
+}
+
+/**
+ *   @brief deserialize the stats st capability list
+ *
+ *   Iterates thru stat_enum_str and populate
+ *   the stats_capability with respective
+ *   stat_enum (String to Enum conversion).
+ *   Also iterates thru stat_modes_str and populate
+ *   the stats_capability with respective
+ *   stat_modes (String to Enum conversion)
+ *
+ *   @param stats_capability stats stream telemetry capability enum list
+ *   @param stat_enum_str SAI stat enum list as string
+ *   @param stat_modes_str SAI stat mode list as string
+ *  @param minimal_polling_interval_str SAI minimal polling interval list as string
+ *   @return Void
+ */
+void sai_deserialize_stats_st_capability_list(
+    _Inout_ sai_stat_st_capability_list_t *stats_capability,
+    _In_ const std::string &stat_enum_str,
+    _In_ const std::string &stat_modes_str,
+    _In_ const std::string &minimal_polling_interval_str)
+{
+    SWSS_LOG_ENTER();
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_THROW("Stats capability pointer in deserialize is NULL");
+    }
+
+    uint32_t num_capabilities = stats_capability->count;
+    size_t stat_enum_position = 0;
+    size_t stat_modes_position = 0;
+    size_t stat_polling_interval_position = 0;
+
+    for (uint32_t i = 0; i < num_capabilities; i++)
+    {
+        /* 1. Populate stat_enum */
+        size_t old_stat_enum_position = stat_enum_position;
+        stat_enum_position = stat_enum_str.find(",", old_stat_enum_position);
+        std::string stat_enum = stat_enum_str.substr(old_stat_enum_position,
+                                                     stat_enum_position - old_stat_enum_position);
+        stats_capability->list[i].capability.stat_enum = std::stoi(stat_enum);
+
+        /* We have run out of values to add to our list */
+        if (stat_enum_position == std::string::npos)
+        {
+            if (num_capabilities != i + 1)
+            {
+                SWSS_LOG_THROW("Lesser stat_enums than expected: expected %d, received %d",
+                               num_capabilities, i + 1);
+            }
+
+            break;
+        }
+
+        /* 2. Populate stat_modes */
+        size_t old_stat_modes_position = stat_modes_position;
+        stat_modes_position = stat_modes_str.find(",", old_stat_modes_position);
+        std::string stat_modes = stat_modes_str.substr(old_stat_modes_position,
+                                                       stat_modes_position - old_stat_modes_position);
+        stats_capability->list[i].capability.stat_modes = std::stoi(stat_modes);
+
+        /* We have run out of values to add to our list */
+        if (stat_modes_position == std::string::npos)
+        {
+            if (num_capabilities != i + 1)
+            {
+                SWSS_LOG_THROW("Lesser stat_modes than expected: expected %d, received %d",
+                               num_capabilities, i + 1);
+            }
+
+            break;
+        }
+
+        /* 3. Populate minimal polling interval */
+        size_t old_stat_polling_interval_position = stat_polling_interval_position;
+        stat_polling_interval_position = minimal_polling_interval_str.find(",", old_stat_polling_interval_position);
+        std::string minimal_polling_interval = minimal_polling_interval_str.substr(old_stat_polling_interval_position,
+                stat_polling_interval_position - old_stat_polling_interval_position);
+        stats_capability->list[i].minimal_polling_interval = std::stoull(minimal_polling_interval);
+
+
+        /* Skip the commas */
+        stat_enum_position++;
+        stat_modes_position++;
+        stat_polling_interval_position++;
+    }
+}
+
+void sai_deserialize_switch_macsec_post_status(
+        _In_ const std::string& s,
+        _Out_ sai_switch_macsec_post_status_t& switch_macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_switch_macsec_post_status_t, (int32_t&)switch_macsec_post_status);
+}
+
+void sai_deserialize_switch_macsec_post_status_ntf(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t& switch_id,
+        _Out_ sai_switch_macsec_post_status_t& switch_macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], switch_id);
+    sai_deserialize_switch_macsec_post_status(j["macsec_post_status"],
+                                              switch_macsec_post_status);
+}
+
+void sai_deserialize_macsec_post_status(
+        _In_ const std::string& s,
+        _Out_ sai_macsec_post_status_t& macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    sai_deserialize_enum(s, &sai_metadata_enum_sai_macsec_post_status_t, (int32_t&)macsec_post_status);
+}
+
+void sai_deserialize_macsec_post_status_ntf(
+        _In_ const std::string& s,
+        _Out_ sai_object_id_t& macsec_id,
+        _Out_ sai_macsec_post_status_t& macsec_post_status)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["macsec_id"], macsec_id);
+    sai_deserialize_macsec_post_status(j["macsec_post_status"],
+                                       macsec_post_status);
 }

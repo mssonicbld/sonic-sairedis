@@ -34,11 +34,11 @@ namespace saimeta
 
         public:
 
-            virtual sai_status_t initialize(
+            virtual sai_status_t apiInitialize(
                     _In_ uint64_t flags,
                     _In_ const sai_service_method_table_t *service_method_table) override;
 
-            virtual sai_status_t uninitialize(void) override;
+            virtual sai_status_t apiUninitialize(void) override;
 
         public: // SAI interface overrides
 
@@ -96,6 +96,15 @@ namespace saimeta
                     _In_ sai_bulk_op_error_mode_t mode,
                     _Out_ sai_status_t *object_statuses) override;
 
+            virtual sai_status_t bulkGet(
+                    _In_ sai_object_type_t object_type,
+                    _In_ uint32_t object_count,
+                    _In_ const sai_object_id_t *object_id,
+                    _In_ const uint32_t *attr_count,
+                    _Inout_ sai_attribute_t **attr_list,
+                    _In_ sai_bulk_op_error_mode_t mode,
+                    _Out_ sai_status_t *object_statuses) override;
+
         public: // stats API
 
             virtual sai_status_t getStats(
@@ -109,6 +118,11 @@ namespace saimeta
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _Inout_ sai_stat_capability_list_t *stats_capability) override;
+
+            virtual sai_status_t queryStatsStCapability(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_object_type_t object_type,
+                    _Inout_ sai_stat_st_capability_list_t *stats_capability) override;
 
             virtual sai_status_t getStatsExt(
                     _In_ sai_object_type_t object_type,
@@ -167,7 +181,7 @@ namespace saimeta
                     _In_ sai_attr_id_t attr_id,
                     _Out_ sai_attr_capability_t *capability) override;
 
-            virtual sai_status_t queryAattributeEnumValuesCapability(
+            virtual sai_status_t queryAttributeEnumValuesCapability(
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_object_type_t object_type,
                     _In_ sai_attr_id_t attr_id,
@@ -182,6 +196,9 @@ namespace saimeta
             virtual sai_status_t logSet(
                     _In_ sai_api_t api,
                     _In_ sai_log_level_t log_level) override;
+
+            virtual sai_status_t queryApiVersion(
+                    _Out_ sai_api_version_t *version) override;
 
         public:
 
@@ -205,6 +222,14 @@ namespace saimeta
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_switch_oper_status_t switch_oper_status);
 
+            void meta_sai_on_switch_asic_sdk_health_event(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_switch_asic_sdk_health_severity_t severity,
+                    _In_ sai_timespec_t timestamp,
+                    _In_ sai_switch_asic_sdk_health_category_t category,
+                    _In_ sai_switch_health_data_t data,
+                    _In_ const sai_u8_list_t description);
+
             void meta_sai_on_switch_shutdown_request(
                     _In_ sai_object_id_t switch_id);
 
@@ -220,12 +245,30 @@ namespace saimeta
                     _In_ uint32_t count,
                     _In_ const sai_bfd_session_state_notification_t *data);
 
+            void meta_sai_on_icmp_echo_session_state_change(
+                    _In_ uint32_t count,
+                    _In_ const sai_icmp_echo_session_state_notification_t *data);
+
+            void meta_sai_on_ha_set_event(
+                    _In_ uint32_t count,
+                    _In_ const sai_ha_set_event_data_t *data);
+
+            void meta_sai_on_ha_scope_event(
+                    _In_ uint32_t count,
+                    _In_ const sai_ha_scope_event_data_t *data);
+
             void meta_sai_on_port_host_tx_ready_change(
                     _In_ sai_object_id_t port_id,
                     _In_ sai_object_id_t switch_id,
                     _In_ sai_port_host_tx_ready_status_t host_tx_ready_status);
 
-        private: // notifications helpers
+            void meta_sai_on_twamp_session_event(
+                    _In_ uint32_t count,
+                    _In_ const sai_twamp_session_event_notification_data_t *data);
+
+            void meta_sai_on_tam_tel_type_config_change(_In_ sai_object_id_t m_tam_id);
+
+    private: // notifications helpers
 
             void meta_sai_on_fdb_flush_event_consolidated(
                     _In_ const sai_fdb_event_notification_data_t& data);
@@ -248,7 +291,19 @@ namespace saimeta
             void meta_sai_on_bfd_session_state_change_single(
                     _In_ const sai_bfd_session_state_notification_t& data);
 
-        private: // validation helpers
+            void meta_sai_on_icmp_echo_session_state_change_single(
+                    _In_ const sai_icmp_echo_session_state_notification_t& data);
+
+            void meta_sai_on_ha_set_event_single(
+                    _In_ const sai_ha_set_event_data_t& data);
+
+            void meta_sai_on_ha_scope_event_single(
+                    _In_ const sai_ha_scope_event_data_t& data);
+
+            void meta_sai_on_twamp_session_event_single(
+                    _In_ const sai_twamp_session_event_notification_data_t& data);
+
+    private: // validation helpers
 
             sai_status_t meta_generic_validation_objlist(
                     _In_ const sai_attr_metadata_t& md,
@@ -287,6 +342,15 @@ namespace saimeta
 
             static bool is_ipv6_mask_valid(
                     _In_ const uint8_t* mask);
+
+            static bool isPortObjectIdValid(
+                    _In_ sai_object_type_t object_type);
+
+	    static bool isIcmpEchoSessionObjectIdValid(
+                    _In_ sai_object_type_t object_type);
+
+            static std::vector<std::string> getValidPortObjectTypes();
+            static std::vector<std::string> getValidIcmpEchoSessionObjectTypes();
 
         private: // unit tests helpers
 
@@ -432,10 +496,6 @@ namespace saimeta
                     _Out_ uint64_t *counters,
                     _In_ sai_stats_mode_t mode);
 
-            sai_status_t meta_validate_query_stats_capability(
-                    _In_ sai_object_type_t object_type,
-                    _In_ sai_object_id_t object_id);
-
         private: // validate OID
 
             sai_status_t meta_sai_validate_oid(
@@ -525,6 +585,36 @@ namespace saimeta
                     _In_ const sai_outbound_ca_to_pa_entry_t* outbound_ca_to_pa_entry,
                     _In_ bool create,
                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_flow_entry(
+                     _In_ const sai_flow_entry_t* flow_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_meter_bucket_entry(
+                     _In_ const sai_meter_bucket_entry_t* meter_bucket_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_prefix_compression_entry(
+                     _In_ const sai_prefix_compression_entry_t* prefix_compression_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_outbound_port_map_port_range_entry(
+                     _In_ const sai_outbound_port_map_port_range_entry_t* outbound_port_map_port_range_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_global_trusted_vni_entry(
+                     _In_ const sai_global_trusted_vni_entry_t* global_trusted_vni_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
+
+             sai_status_t meta_sai_validate_eni_trusted_vni_entry(
+                     _In_ const sai_eni_trusted_vni_entry_t* eni_trusted_vni_entry,
+                     _In_ bool create,
+                     _In_ bool get = false);
 
         public:
 

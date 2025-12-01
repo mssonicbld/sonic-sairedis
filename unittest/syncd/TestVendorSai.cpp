@@ -54,7 +54,7 @@ public:
     {
         m_vsai = std::make_shared<VendorSai>();
 
-        auto status = m_vsai->initialize(0, &test_services);
+        auto status = m_vsai->apiInitialize(0, &test_services);
         ASSERT_EQ(status, SAI_STATUS_SUCCESS);
 
         sai_attribute_t attr;
@@ -70,7 +70,7 @@ public:
         auto status = m_vsai->remove(SAI_OBJECT_TYPE_SWITCH, m_swid);
         ASSERT_EQ(status, SAI_STATUS_SUCCESS);
 
-        status = m_vsai->uninitialize();
+        status = m_vsai->apiUninitialize();
         ASSERT_EQ(status, SAI_STATUS_SUCCESS);
     }
 
@@ -136,7 +136,7 @@ TEST_F(VendorSaiTest, portBulkAddRemove)
 TEST(VendorSai, bulkGetStats)
 {
     VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
     ASSERT_EQ(SAI_STATUS_NOT_IMPLEMENTED, sai.bulkGetStats(SAI_NULL_OBJECT_ID,
                                                            SAI_OBJECT_TYPE_PORT,
                                                            0,
@@ -154,6 +154,28 @@ TEST(VendorSai, bulkGetStats)
                                                              nullptr,
                                                              SAI_STATS_MODE_BULK_READ_AND_CLEAR,
                                                              nullptr));
+}
+
+TEST(VendorSai, getStatsExt)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+    ASSERT_EQ(SAI_STATUS_NOT_SUPPORTED, sai.getStatsExt(SAI_OBJECT_TYPE_NULL,
+                                                          SAI_NULL_OBJECT_ID,
+                                                          0,
+                                                          nullptr,
+                                                          SAI_STATS_MODE_READ,
+                                                          nullptr));
+}
+
+TEST(VendorSai, clearStats)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+    ASSERT_EQ(SAI_STATUS_NOT_SUPPORTED, sai.clearStats(SAI_OBJECT_TYPE_NULL,
+                                                       SAI_NULL_OBJECT_ID,
+                                                       0,
+                                                       nullptr));
 }
 
 sai_object_id_t create_port(
@@ -211,7 +233,7 @@ sai_object_id_t create_rif(
 TEST(VendorSai, quad_bulk_neighbor_entry)
 {
     VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchId = 0;
 
@@ -377,10 +399,32 @@ static void remove_eni(VendorSai &sai, sai_object_id_t eni)
     EXPECT_EQ(SAI_STATUS_SUCCESS, sai.remove((sai_object_type_t)SAI_OBJECT_TYPE_ENI, eni));
 }
 
+static sai_object_id_t create_outbound_routing_group(VendorSai &sai, sai_object_id_t switchid, bool disabled)
+{
+    SWSS_LOG_ENTER();
+
+    sai_object_id_t oid;
+    sai_attribute_t attr;
+
+    attr.id = SAI_OUTBOUND_ROUTING_GROUP_ATTR_DISABLED;
+    attr.value.booldata = disabled;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.create((sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_ROUTING_GROUP, &oid, switchid, 1, &attr));
+
+    return oid;
+}
+
+static void remove_outbound_routing_group(VendorSai &sai, sai_object_id_t outbound_routing_group)
+{
+    SWSS_LOG_ENTER();
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.remove((sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_ROUTING_GROUP, outbound_routing_group));
+}
+
 TEST(VendorSai, quad_dash_direction_lookup)
 {
     VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -405,7 +449,7 @@ TEST(VendorSai, quad_dash_direction_lookup)
 TEST(VendorSai, bulk_dash_direction_lookup)
 {
     VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -447,7 +491,7 @@ TEST(VendorSai, bulk_dash_direction_lookup)
 TEST(VendorSai, quad_dash_eni)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -501,7 +545,7 @@ TEST(VendorSai, quad_dash_eni)
 TEST(VendorSai, bulk_dash_eni)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -562,7 +606,7 @@ TEST(VendorSai, bulk_dash_eni)
 TEST(VendorSai, quad_dash_eni_acl)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -615,7 +659,7 @@ TEST(VendorSai, quad_dash_eni_acl)
 TEST(VendorSai, quad_dash_vip)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -642,7 +686,7 @@ TEST(VendorSai, quad_dash_vip)
 TEST(VendorSai, bulk_dash_vip)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -690,7 +734,7 @@ TEST(VendorSai, bulk_dash_vip)
 TEST(VendorSai, quad_dash_acl_group)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -711,7 +755,7 @@ TEST(VendorSai, quad_dash_acl_group)
 TEST(VendorSai, bulk_dash_acl_group)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -749,7 +793,7 @@ TEST(VendorSai, bulk_dash_acl_group)
 TEST(VendorSai, quad_dash_acl_rule)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -827,7 +871,7 @@ TEST(VendorSai, quad_dash_acl_rule)
 TEST(VendorSai, bulk_dash_acl_rule)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -924,7 +968,7 @@ TEST(VendorSai, bulk_dash_acl_rule)
 TEST(VendorSai, quad_dash_vnet)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -941,7 +985,7 @@ TEST(VendorSai, quad_dash_vnet)
 TEST(VendorSai, bulk_dash_vnet)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -979,7 +1023,7 @@ TEST(VendorSai, bulk_dash_vnet)
 TEST(VendorSai, quad_dash_inbound_routing_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1015,7 +1059,7 @@ TEST(VendorSai, quad_dash_inbound_routing_entry)
 TEST(VendorSai, bulk_dash_inbound_routing_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1081,7 +1125,7 @@ TEST(VendorSai, bulk_dash_inbound_routing_entry)
 TEST(VendorSai, quad_dash_pa_validation)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1109,7 +1153,7 @@ TEST(VendorSai, quad_dash_pa_validation)
 TEST(VendorSai, bulk_dash_pa_validation)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1164,7 +1208,7 @@ TEST(VendorSai, bulk_dash_pa_validation)
 TEST(VendorSai, quad_dash_outbound_routing_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1172,7 +1216,7 @@ TEST(VendorSai, quad_dash_outbound_routing_entry)
 
     sai_object_id_t counter = create_counter(sai, switchid);
     sai_object_id_t vnet = create_vnet(sai, switchid, 101);
-    sai_object_id_t eni = create_eni(sai, switchid, vnet);
+    sai_object_id_t outbound_routing_group = create_outbound_routing_group(sai, switchid, false);
 
     sai_ip_address_t oip6;
     oip6.addr_family = SAI_IP_ADDR_FAMILY_IPV6;
@@ -1180,7 +1224,7 @@ TEST(VendorSai, quad_dash_outbound_routing_entry)
 
     sai_outbound_routing_entry_t entry0;
     entry0.switch_id = switchid;
-    entry0.eni_id = eni;
+    entry0.outbound_routing_group_id = outbound_routing_group;
     entry0.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
     inet_pton(AF_INET, "192.168.1.0", &entry0.destination.addr.ip4);
     inet_pton(AF_INET, "255.255.255.0", &entry0.destination.mask.ip4);
@@ -1202,7 +1246,7 @@ TEST(VendorSai, quad_dash_outbound_routing_entry)
 
     EXPECT_EQ(SAI_STATUS_SUCCESS, sai.remove(&entry0));
 
-    remove_eni(sai, eni);
+    remove_outbound_routing_group(sai, outbound_routing_group);
     remove_vnet(sai, vnet);
     remove_counter(sai, counter);
 }
@@ -1210,7 +1254,7 @@ TEST(VendorSai, quad_dash_outbound_routing_entry)
 TEST(VendorSai, bulk_dash_outbound_routing_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1228,8 +1272,8 @@ TEST(VendorSai, bulk_dash_outbound_routing_entry)
 
     sai_object_id_t vnet0 = create_vnet(sai, switchid, 101);
     sai_object_id_t vnet1 = create_vnet(sai, switchid, 102);
-    sai_object_id_t eni0 = create_eni(sai, switchid, vnet0);
-    sai_object_id_t eni1 = create_eni(sai, switchid, vnet1);
+    sai_object_id_t outbound_routing_group0 = create_outbound_routing_group(sai, switchid, false);
+    sai_object_id_t outbound_routing_group1 = create_outbound_routing_group(sai, switchid, false);
 
     sai_ip_prefix_t dst0 = {};
     sai_ip_prefix_t dst1 = {};
@@ -1263,8 +1307,8 @@ TEST(VendorSai, bulk_dash_outbound_routing_entry)
     sai_status_t statuses[entries_count] = {};
 
     sai_outbound_routing_entry_t entries[entries_count] = {
-        { .switch_id = switchid, .eni_id = eni0, .destination = dst0},
-        { .switch_id = switchid, .eni_id = eni1, .destination = dst1},
+        { .switch_id = switchid, .destination = dst0, .outbound_routing_group_id = outbound_routing_group0},
+        { .switch_id = switchid, .destination = dst1, .outbound_routing_group_id = outbound_routing_group1},
     };
 
     EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate(entries_count, entries, attr_count, attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, statuses));
@@ -1277,8 +1321,8 @@ TEST(VendorSai, bulk_dash_outbound_routing_entry)
         EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
     }
 
-    remove_eni(sai, eni0);
-    remove_eni(sai, eni1);
+    remove_outbound_routing_group(sai, outbound_routing_group0);
+    remove_outbound_routing_group(sai, outbound_routing_group1);
     remove_vnet(sai, vnet0);
     remove_vnet(sai, vnet1);
     remove_counter(sai, counter0);
@@ -1288,7 +1332,7 @@ TEST(VendorSai, bulk_dash_outbound_routing_entry)
 TEST(VendorSai, quad_dash_outbound_ca_to_pa_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1337,7 +1381,7 @@ TEST(VendorSai, quad_dash_outbound_ca_to_pa_entry)
 TEST(VendorSai, bulk_dash_outbound_ca_to_pa_entry)
 {
         VendorSai sai;
-    sai.initialize(0, &test_services);
+    sai.apiInitialize(0, &test_services);
 
     sai_object_id_t switchid = create_switch(sai);
 
@@ -1404,4 +1448,362 @@ TEST(VendorSai, bulk_dash_outbound_ca_to_pa_entry)
     remove_vnet(sai, vnet1);
     remove_counter(sai, counter0);
     remove_counter(sai, counter1);
+}
+
+TEST(VendorSai, bulkGet)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    sai_object_id_t oids[1] = {0};
+    uint32_t attrcount[1] = {0};
+    sai_attribute_t* attrs[1] = {0};
+    sai_status_t statuses[1] = {0};
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            sai.bulkGet(
+                SAI_OBJECT_TYPE_PORT,
+                1,
+                oids,
+                attrcount,
+                attrs,
+                SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR,
+                statuses));
+}
+
+TEST_F(VendorSaiTest, bulk_flow_entry)
+{
+    sai_flow_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+}
+
+TEST_F(VendorSaiTest, bulk_meter_bucket_entry)
+{
+    sai_meter_bucket_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+}
+
+TEST(VendorSai, bulk_meter_rules)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    sai_object_id_t switchid = create_switch(sai);
+
+    sai_attribute_t attr;
+    sai_object_id_t meter_policy0, meter_policy1;
+    attr.id = SAI_METER_POLICY_ATTR_IP_ADDR_FAMILY;
+    attr.value.s32 = SAI_IP_ADDR_FAMILY_IPV4;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.create((sai_object_type_t)SAI_OBJECT_TYPE_METER_POLICY, &meter_policy0, switchid, 1, &attr));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.create((sai_object_type_t)SAI_OBJECT_TYPE_METER_POLICY, &meter_policy1, switchid, 1, &attr));
+
+    sai_ip_address_t dst0 = {};
+    sai_ip_address_t mask0 = {};
+    sai_ip_address_t dst1 = {};
+    sai_ip_address_t mask1 = {};
+    dst0.addr_family = dst1.addr_family = mask0.addr_family = mask1.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+    inet_pton(AF_INET, "192.1.1.0", &dst0.addr.ip4);
+    inet_pton(AF_INET, "255.255.255.0", &mask0.addr.ip4);
+    inet_pton(AF_INET, "192.15.0.0", &dst1.addr.ip4);
+    inet_pton(AF_INET, "255.255.0.0", &mask1.addr.ip4);
+
+    sai_attribute_t attrs0[] = {
+        {.id = SAI_METER_RULE_ATTR_METER_POLICY_ID, .value = (sai_attribute_value_t){.oid = meter_policy0}},
+        {.id = SAI_METER_RULE_ATTR_DIP, .value = (sai_attribute_value_t){.ipaddr = dst0}},
+        {.id = SAI_METER_RULE_ATTR_DIP_MASK, .value = (sai_attribute_value_t){.ipaddr = mask0}},
+        {.id = SAI_METER_RULE_ATTR_METER_CLASS, .value = (sai_attribute_value_t){.u32 = 100}},
+        {.id = SAI_METER_RULE_ATTR_PRIORITY, .value = (sai_attribute_value_t){.u32 = 1}},
+    };
+
+     sai_attribute_t attrs1[] = {
+        {.id = SAI_METER_RULE_ATTR_METER_POLICY_ID, .value = (sai_attribute_value_t){.oid = meter_policy1}},
+        {.id = SAI_METER_RULE_ATTR_DIP, .value = (sai_attribute_value_t){.ipaddr = dst1}},
+        {.id = SAI_METER_RULE_ATTR_DIP_MASK, .value = (sai_attribute_value_t){.ipaddr = mask1}},
+        {.id = SAI_METER_RULE_ATTR_METER_CLASS, .value = (sai_attribute_value_t){.u32 = 200}},
+        {.id = SAI_METER_RULE_ATTR_PRIORITY, .value = (sai_attribute_value_t){.u32 = 2}},
+    };
+
+    const sai_attribute_t *attr_list[] = {
+        attrs0,
+        attrs1,
+    };
+    constexpr uint32_t meter_rules_count = sizeof(attr_list) / sizeof(sai_attribute_t*);
+    constexpr uint32_t meter_rule_attrs_count = sizeof(attrs0) / sizeof(sai_attribute_t);
+
+    uint32_t attr_count[meter_rules_count] = {meter_rule_attrs_count, meter_rule_attrs_count};
+    sai_object_id_t meter_rules[meter_rules_count];
+    sai_status_t statuses[meter_rules_count] = {};
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate((sai_object_type_t)SAI_OBJECT_TYPE_METER_RULE, switchid, meter_rules_count, attr_count, attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, meter_rules, statuses));
+    for (uint32_t i = 0; i < meter_rules_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_METER_RULE, meter_rules_count, meter_rules, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, statuses));
+    for (uint32_t i = 0; i < meter_rules_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.remove((sai_object_type_t)SAI_OBJECT_TYPE_METER_POLICY, meter_policy0));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.remove((sai_object_type_t)SAI_OBJECT_TYPE_METER_POLICY, meter_policy1));
+}
+
+TEST(VendorSai, logSet_logGet)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.logSet(SAI_API_PORT, SAI_LOG_LEVEL_DEBUG));
+
+    EXPECT_EQ(SAI_LOG_LEVEL_DEBUG, sai.logGet(SAI_API_PORT));
+    EXPECT_EQ(SAI_LOG_LEVEL_NOTICE, sai.logGet(SAI_API_SWITCH));
+}
+
+TEST_F(VendorSaiTest, bulk_prefix_compression_entry)
+{
+    sai_prefix_compression_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+}
+
+TEST(VendorSai, queryStatsStCapability)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    sai_stat_st_capability_list_t st;
+
+    sai_stat_st_capability_t item;
+
+    st.count = 1;
+    st.list = &item;
+
+    sai_status_t status = sai.queryStatsStCapability(
+            SAI_NULL_OBJECT_ID, // switch id
+            SAI_OBJECT_TYPE_QUEUE,
+            &st);
+
+    // success expected, since always compiled against virtual switch
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, status); // switch is null
+}
+
+TEST(VendorSai, bulk_dash_tunnel)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    sai_object_id_t switchid = create_switch(sai);
+
+    sai_ip_address_t tunnel_dip1 = {};
+    sai_ip_address_t tunnel_nhop_dip1 = {};
+    sai_ip_address_t tunnel_nhop_dip2 = {};
+    tunnel_dip1.addr_family = tunnel_nhop_dip1.addr_family = tunnel_nhop_dip2.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+    inet_pton(AF_INET, "192.168.0.1", &tunnel_dip1.addr.ip4);
+    inet_pton(AF_INET, "192.168.0.2", &tunnel_nhop_dip1.addr.ip4);
+    inet_pton(AF_INET, "192.168.0.3", &tunnel_nhop_dip2.addr.ip4);
+
+    // DASH Tunnel
+    sai_attribute_t tunnel_attrs0[] = {
+        {.id = SAI_DASH_TUNNEL_ATTR_DIP, .value = (sai_attribute_value_t){.ipaddr = tunnel_dip1}},
+	{.id = SAI_DASH_TUNNEL_ATTR_DASH_ENCAPSULATION, .value = (sai_attribute_value_t){.s32 = SAI_DASH_ENCAPSULATION_VXLAN}},
+	{.id = SAI_DASH_TUNNEL_ATTR_TUNNEL_KEY, .value = (sai_attribute_value_t){.s32 = 100}},
+    };
+
+     sai_attribute_t tunnel_attrs1[] = {
+        {.id = SAI_DASH_TUNNEL_ATTR_MAX_MEMBER_SIZE, .value = (sai_attribute_value_t){.s32 = 2}},
+	{.id = SAI_DASH_TUNNEL_ATTR_DASH_ENCAPSULATION, .value = (sai_attribute_value_t){.s32 = SAI_DASH_ENCAPSULATION_VXLAN}},
+	{.id = SAI_DASH_TUNNEL_ATTR_TUNNEL_KEY, .value = (sai_attribute_value_t){.s32 = 200}},
+    };
+
+    const sai_attribute_t *tunnel_attr_list[] = {
+        tunnel_attrs0,
+        tunnel_attrs1,
+    };
+
+    constexpr uint32_t tunnels_count = sizeof(tunnel_attr_list) / sizeof(sai_attribute_t*);
+    constexpr uint32_t tunnel_attrs_count = sizeof(tunnel_attrs0) / sizeof(sai_attribute_t);
+
+    uint32_t tunnel_attr_count[tunnels_count] = {tunnel_attrs_count, tunnel_attrs_count};
+    sai_object_id_t tunnels[tunnels_count];
+    sai_status_t statuses[tunnels_count] = {};
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL, switchid, tunnels_count, tunnel_attr_count, tunnel_attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, tunnels, statuses));
+    for (uint32_t i = 0; i < tunnels_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+
+    // DASH Tunnel next hop
+     sai_attribute_t tunnel_nhop_attrs0[] = {
+        {.id = SAI_DASH_TUNNEL_NEXT_HOP_ATTR_DIP, .value = (sai_attribute_value_t){.ipaddr = tunnel_nhop_dip1}},
+     };
+     sai_attribute_t tunnel_nhop_attrs1[] = {
+        {.id = SAI_DASH_TUNNEL_NEXT_HOP_ATTR_DIP, .value = (sai_attribute_value_t){.ipaddr = tunnel_nhop_dip2}},
+     };
+
+    const sai_attribute_t *tunnel_nhop_attr_list[] = {
+        tunnel_nhop_attrs0,
+        tunnel_nhop_attrs1,
+    };
+
+    constexpr uint32_t tunnel_nhop_count = sizeof(tunnel_nhop_attr_list) / sizeof(sai_attribute_t*);
+    constexpr uint32_t tunnel_nhop_attrs_count = sizeof(tunnel_nhop_attrs0) / sizeof(sai_attribute_t);
+
+    uint32_t tunnel_nhop_attr_count[] = {tunnel_nhop_attrs_count, tunnel_nhop_attrs_count};
+    sai_object_id_t tunnel_nhops[tunnel_nhop_count];
+    sai_status_t tunnel_nhop_statuses[tunnel_nhop_count] = {};
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL_NEXT_HOP, switchid, tunnel_nhop_count, tunnel_nhop_attr_count, tunnel_nhop_attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, tunnel_nhops, tunnel_nhop_statuses));
+    for (uint32_t i = 0; i < tunnel_nhop_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, tunnel_nhop_statuses[i]);
+    }
+
+    // DASH Tunnel member
+     sai_attribute_t tunnel_member_attrs0[] = {
+        {.id = SAI_DASH_TUNNEL_MEMBER_ATTR_DASH_TUNNEL_ID, .value = (sai_attribute_value_t){.oid = tunnels[1]}},
+        {.id = SAI_DASH_TUNNEL_MEMBER_ATTR_DASH_TUNNEL_NEXT_HOP_ID, .value = (sai_attribute_value_t){.oid = tunnel_nhops[0]}},
+     };
+     sai_attribute_t tunnel_member_attrs1[] = {
+        {.id = SAI_DASH_TUNNEL_MEMBER_ATTR_DASH_TUNNEL_ID, .value = (sai_attribute_value_t){.oid = tunnels[1]}},
+        {.id = SAI_DASH_TUNNEL_MEMBER_ATTR_DASH_TUNNEL_NEXT_HOP_ID, .value = (sai_attribute_value_t){.oid = tunnel_nhops[1]}},
+     };
+
+    const sai_attribute_t *tunnel_member_attr_list[] = {
+        tunnel_member_attrs0,
+        tunnel_member_attrs1,
+    };
+
+    constexpr uint32_t tunnel_member_count = sizeof(tunnel_member_attr_list) / sizeof(sai_attribute_t*);
+    constexpr uint32_t tunnel_member_attrs_count = sizeof(tunnel_member_attrs0) / sizeof(sai_attribute_t);
+
+    uint32_t tunnel_member_attr_count[] = {tunnel_member_attrs_count, tunnel_member_attrs_count};
+    sai_object_id_t tunnel_members[tunnel_member_count];
+    sai_status_t tunnel_member_statuses[tunnel_member_count] = {};
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL_MEMBER, switchid, tunnel_member_count, tunnel_member_attr_count, tunnel_member_attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, tunnel_members, tunnel_member_statuses));
+    for (uint32_t i = 0; i < tunnel_member_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, tunnel_member_statuses[i]);
+    }
+
+    // Remove all
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL_MEMBER, tunnel_member_count, tunnel_members, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, tunnel_member_statuses));
+    for (uint32_t i = 0; i < tunnel_member_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, tunnel_member_statuses[i]);
+    }
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL_NEXT_HOP, tunnel_nhop_count, tunnel_nhops, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, tunnel_nhop_statuses));
+    for (uint32_t i = 0; i < tunnel_nhop_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, tunnel_nhop_statuses[i]);
+    }
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_DASH_TUNNEL, tunnels_count, tunnels, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, statuses));
+    for (uint32_t i = 0; i < tunnels_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+}
+
+TEST(VendorSai, bulk_outbound_port_map)
+{
+    VendorSai sai;
+    sai.apiInitialize(0, &test_services);
+
+    sai_object_id_t switchid = create_switch(sai);
+
+    sai_attribute_t port_map_attrs[] = {
+        {.id = SAI_OUTBOUND_PORT_MAP_ATTR_COUNTER_ID, .value = (sai_attribute_value_t){.oid = SAI_NULL_OBJECT_ID}},
+    };
+
+    const sai_attribute_t *port_map_attr_list[] = {
+        port_map_attrs,
+        port_map_attrs,
+    };
+    constexpr uint32_t port_map_count = sizeof(port_map_attr_list) / sizeof(sai_attribute_t*);
+
+    uint32_t port_map_attr_count[port_map_count] = {0, 0};
+    sai_object_id_t port_maps[port_map_count];
+    sai_status_t statuses[port_map_count] = {};
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkCreate((sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP,
+              switchid, port_map_count, port_map_attr_count, port_map_attr_list, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, port_maps, statuses));
+    for (uint32_t i = 0; i < port_map_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, sai.bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP,
+              port_map_count, port_maps, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, statuses));
+    for (uint32_t i = 0; i < port_map_count; i++) {
+        EXPECT_EQ(SAI_STATUS_SUCCESS, statuses[i]);
+    }
+}
+
+TEST_F(VendorSaiTest, bulk_outbound_port_map_port_range_entry)
+{
+    sai_outbound_port_map_port_range_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+}
+
+TEST_F(VendorSaiTest, bulk_global_trusted_vni_entry)
+{
+    sai_global_trusted_vni_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+}
+
+TEST_F(VendorSaiTest, bulk_eni_trusted_vni_entry)
+{
+    sai_eni_trusted_vni_entry_t *e = nullptr;
+
+    // metadata will fail
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkCreate(0, e, nullptr, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            m_vsai->bulkRemove(0, e, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
+
+    EXPECT_EQ(SAI_STATUS_NOT_SUPPORTED,
+            m_vsai->bulkSet(0, e, nullptr, SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR, nullptr));
 }
